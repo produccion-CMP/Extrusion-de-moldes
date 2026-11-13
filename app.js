@@ -1,19 +1,12 @@
 'use strict';
 
 const VISTAS = [
-  { id: 'catalogo', e: '🧱', n: 'Catálogo' },
-  { id: 'cargar', e: '➕', n: 'Cargar molde' },
+  { id: 'catalogo', e: '🧱', n: 'Moldes' },
+  { id: 'nuevo', e: '📄', n: 'Nuevo plano' },
   { id: 'comparar', e: '⚖️', n: 'Comparar' },
-  { id: 'tipos', e: '🏷️', n: 'Tipos' },
   { id: 'ajustes', e: '⚙️', n: 'Ajustes' }
 ];
-const BNAV = [
-  { id: 'catalogo', e: '🧱', n: 'Catálogo' },
-  { id: 'cargar', e: '➕', n: 'Cargar' },
-  { id: 'comparar', e: '⚖️', n: 'Comparar' },
-  { id: 'tipos', e: '🏷️', n: 'Tipos' },
-  { id: 'ajustes', e: '⚙️', n: 'Ajustes' }
-];
+const BNAV = VISTAS;
 const FRASES = ['Midiendo dados…', 'Leyendo planos…', 'Calculando contracciones…', 'Horneando a 900 °C…', 'Contando huecos…'];
 const ST = { tipos: [], moldes: [], cargado: false, vista: 'catalogo', args: [], filtro: { q: '', familia: '', estado: '' }, geo: {}, visor: null, carga: null };
 
@@ -55,13 +48,6 @@ function moverPill(cont) {
   if (!on) { pill.style.width = '0'; return; }
   pill.style.left = on.offsetLeft + 'px';
   pill.style.width = on.offsetWidth + 'px';
-}
-
-function pintarNav() {
-  const v = ST.vista === 'molde' ? 'catalogo' : ST.vista;
-  $('nav').innerHTML = VISTAS.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}" title="${x.n}"><span class="e">${x.e}</span><span class="tx">${x.n}</span></a>`).join('');
-  $('bnav').innerHTML = BNAV.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}"><span class="e">${x.e}</span>${x.n}</a>`).join('');
-  requestAnimationFrame(() => requestAnimationFrame(() => moverPill($('nav'))));
 }
 
 function temaActual() {
@@ -200,52 +186,6 @@ function bannerLocal() {
   return modoLocal() ? `<div class="banner-local">💾 <span>Modo local: los datos quedan solo en este navegador. Para compartir el catálogo, conectá la planilla en <a href="#/ajustes">Ajustes</a>.</span></div>` : '';
 }
 
-function vistaCatalogo() {
-  const vig = ST.moldes.filter(m => m.estado === 'Vigente').length, pro = ST.moldes.filter(m => m.estado === 'Propuesta').length;
-  const fams = familias();
-  const chipsFam = [''].concat([...fams.keys()]).map(f => `<button type="button" class="chip ${ST.filtro.familia === f ? 'on' : ''}" data-fam="${esc(f)}">${f ? esc(f) : 'Todas'}</button>`).join('');
-  const chipsEst = [''].concat(ESTADOS.map(e => e.id)).map(s => `<button type="button" class="chip ${ST.filtro.estado === s ? 'on' : ''}" data-est="${esc(s)}">${s ? estadoDe(s).e + ' ' + esc(s) : 'Todos'}</button>`).join('');
-  let cuerpo = '';
-  if (!ST.tipos.length) {
-    cuerpo = `<div class="card"><div class="empty"><span style="font-size:2.4rem">🧱</span><b>Todavía no hay tipos de ladrillo ni moldes</b><span>Importá el catálogo inicial con los 4 moldes del portante 12×19×33 o cargá tu primer plano.</span>
-      <div class="acciones"><button class="btn pri" id="btnSeed">📥 Importar catálogo inicial</button><a class="btn" href="#/cargar">➕ Cargar molde</a></div></div></div>`;
-  } else {
-    for (const [fam, tipos] of fams) {
-      if (ST.filtro.familia && ST.filtro.familia !== fam) continue;
-      const bloques = tipos.map(t => {
-        const ms = ST.moldes.filter(m => m.tipoId === t.id);
-        const vis = ms.filter(filtrar);
-        if ((ST.filtro.q || ST.filtro.estado) && !vis.length) return '';
-        const visIds = new Set(vis.map(m => m.id));
-        const lin = linajes(ms).map(l => l.filter(m => visIds.has(m.id))).filter(l => l.length);
-        const params = `<div class="tipo-params"><span class="tag">↔ ${fmt(num(t.contrH), 1)}%</span><span class="tag">↕ ${fmt(num(t.contrV), 1)}%</span><span class="tag">⤢ ${fmt(num(t.contrL), 1)}%</span><span class="tag">📏 ${fmt(num(t.largo))} mm</span><span class="tag">⚖️ ${fmt(num(t.densidad), 2)} g/cm³</span></div>`;
-        const filas = lin.length ? lin.map(l => `<div class="linaje">${l.map((m, i) => {
-          if (!i) return cardMolde(m);
-          const directo = m.padreId === l[i - 1].id;
-          const pad = moldeDe(m.padreId);
-          return `<span class="flecha-v" title="${directo ? 'Versión siguiente' : 'Rama'}">${directo ? '→' : '⑂'}</span>` + cardMolde(m, directo ? null : pad);
-        }).join('')}</div>`).join('') : `<div class="empty">Sin moldes cargados. <a class="btn" href="#/cargar?tipo=${encodeURIComponent(t.id)}">➕ Cargar el primero</a></div>`;
-        return cardHtml(`🏷️ ${esc(t.nombre)}`, `${esc(t.nominal || '')}${t.linea ? ' · ' + esc(t.linea) : ''} · ${ms.length} molde${ms.length === 1 ? '' : 's'}`, filas, ' style="margin-top:12px"', params);
-      }).join('');
-      if (bloques.trim()) cuerpo += `<div class="fam-h"><h2>${esc(fam)}</h2><span class="cnt">${tipos.length} tipo${tipos.length === 1 ? '' : 's'}</span></div>${bloques}`;
-    }
-    if (!cuerpo) cuerpo = '<div class="card"><div class="empty">No hay moldes que coincidan con el filtro.</div></div>';
-  }
-  app().innerHTML = `<section class="vista">${bannerLocal()}
-    <div class="hero"><div><div class="eyebrow">${esc(CONF.PLANTA || 'Planta')}</div><h1>Catálogo de <span>matrices</span></h1>
-      <p class="sub">Cada molde con su ladrillo cocido, agrupado por tipo y enlazado con sus versiones.</p></div>
-      <div class="acciones"><a class="btn pri" href="#/cargar">➕ Cargar molde</a></div></div>
-    <div class="kpis">${kpiHtml('🏷️', 'Tipos', fmt(ST.tipos.length))}${kpiHtml('🧱', 'Moldes', fmt(ST.moldes.length))}${kpiHtml('🟢', 'Vigentes', fmt(vig))}${kpiHtml('🟠', 'Propuestas', fmt(pro))}</div>
-    <div class="card" style="margin-top:16px"><div class="filtros" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-      <input id="fq" type="search" placeholder="🔎 Buscar código, versión, proveedor…" value="${esc(ST.filtro.q)}" style="flex:1;min-width:200px">
-      <div class="chips" id="cFam">${chipsFam}</div><div class="chips" id="cEst">${chipsEst}</div></div></div>
-    ${cuerpo}</section>`;
-  $('fq').oninput = e => { ST.filtro.q = e.target.value; const pos = e.target.selectionStart; vistaCatalogo(); const n = $('fq'); n.focus(); n.setSelectionRange(pos, pos); };
-  $('cFam').querySelectorAll('[data-fam]').forEach(b => { b.onclick = () => { ST.filtro.familia = b.dataset.fam; vistaCatalogo(); }; });
-  $('cEst').querySelectorAll('[data-est]').forEach(b => { b.onclick = () => { ST.filtro.estado = b.dataset.est; vistaCatalogo(); }; });
-  if ($('btnSeed')) $('btnSeed').onclick = importarSeed;
-}
-
 function filaMed(l, v, c, u) { return `<tr><td>${l}</td><td class="n">${v}</td><td class="n">${c}</td><td>${u || ''}</td></tr>`; }
 
 function tablaMedidas(mv, mc, p) {
@@ -290,75 +230,6 @@ function conVisor(cb) {
   setTimeout(() => { if (!hecho) { hecho = true; cb(new Error('No se pudo cargar el visor 3D (three.js)')); } }, 12000);
 }
 
-function montarVisor(host, geoC, mc, geoV, mv) {
-  conVisor(err => {
-    if (!host.isConnected) return;
-    if (err) { host.innerHTML = `<div class="empty">⚠️ ${esc(err.message)}</div>`; return; }
-    if (ST.visor) ST.visor.destruir();
-    ST.visor = window.Visor3D.montar(host, { marco: geoC.marco, huecos: geoC.huecos, ancho: mc.ancho, alto: mc.alto, largo: mc.largo, verde: geoV ? { marco: geoV.marco, huecos: geoV.huecos, ancho: mv.ancho, alto: mv.alto } : null });
-  });
-}
-
-function toolbarVisor() {
-  return `<div class="tb"><div class="seg" id="vPose"><button class="on" data-p="obra">🏗️ Obra</button><button data-p="extr">➡️ Extrusora</button></div>
-    <div class="seg" id="vVista"><button class="on" data-v="iso">Iso</button><button data-v="front">Sección</button><button data-v="top">Planta</button><button data-v="side">Lateral</button></div>
-    <div class="seg" id="vTog"><button class="on" data-t="cotas">Cotas</button><button class="on" data-t="aristas">Aristas</button><button data-t="verde">Molde</button></div></div>`;
-}
-
-function enlazarToolbar() {
-  const seg = (id, fn) => { const c = $(id); if (!c) return; c.querySelectorAll('button').forEach(b => { b.onclick = () => { fn(b, c); moverPill(c); }; }); moverPill(c); };
-  seg('vPose', (b, c) => { c.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); if (ST.visor) ST.visor.pose(b.dataset.p); });
-  seg('vVista', (b, c) => { c.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); if (ST.visor) ST.visor.vista(b.dataset.v); });
-  const t = $('vTog');
-  if (t) t.querySelectorAll('button').forEach(b => { b.onclick = () => { b.classList.toggle('on'); if (ST.visor) ST.visor.mostrar(b.dataset.t, b.classList.contains('on')); }; });
-}
-
-async function vistaMolde(id) {
-  const m = moldeDe(id);
-  if (!m) { app().innerHTML = `<section class="vista"><div class="card"><div class="empty">No existe el molde ${esc(id)}. <a class="btn" href="#/catalogo">Volver al catálogo</a></div></div></section>`; return; }
-  const t = tipoDe(m.tipoId) || {};
-  const e = estadoDe(m.estado);
-  const r = resumenCocido(m, ST.tipos);
-  const ch = cadena(ST.moldes, m.id);
-  const padre = m.padreId ? moldeDe(m.padreId) : null;
-  const tl = ch.arriba.concat([m], ch.abajo.map(x => x.m));
-  app().innerHTML = `<section class="vista">${bannerLocal()}
-    <div class="hero"><div><div class="eyebrow"><a href="#/catalogo">Catálogo</a> · ${esc(t.familia || '')} · ${esc(t.nombre || 'Sin tipo')}</div>
-      <h1>${esc(m.codigo || m.id)} <span>${esc(m.version || '')}</span></h1>
-      <p class="sub"><span class="tag ${e.cls}">${e.e} ${esc(e.id)}</span> ${m.proveedor ? '· ' + esc(m.proveedor) : ''} ${m.fecha ? '· plano del ' + fFecha(m.fecha) : ''} ${m.autor ? '· ' + esc(m.autor) : ''}</p></div>
-      <div class="acciones">${padre ? `<a class="btn" href="#/comparar/${encodeURIComponent(padre.id)}/${encodeURIComponent(m.id)}">⚖️ Comparar con anterior</a>` : ''}<button class="btn" id="btnEditar">✏️ Editar</button><button class="btn" id="btnBorrar">🗑️</button></div></div>
-    <div class="kpis">${kpiHtml('📐', 'Sección cocida', dims2(r.ancho, r.alto), 'mm', 'Molde ' + dims2(num(m.anchoV), num(m.altoV)))}${kpiHtml('📏', 'Largo cocido', fmt(r.largo), 'mm', 'Corte en verde ≈ ' + fmt(r.corte, 1) + ' mm')}${kpiHtml('🕳️', 'Huecos', fmt(r.huecos), '', fmt(r.vacio, 1) + ' % de la sección')}${kpiHtml('⚖️', 'Peso estimado', fmt(r.peso, 2), 'kg', fmt(r.p.densidad, 2) + ' g/cm³')}${kpiHtml('🔥', 'Contracción', fmt(r.p.contrH, 1) + ' / ' + fmt(r.p.contrV, 1), '%', 'horizontal / vertical')}</div>
-    <div class="grid g-21" style="margin-top:16px">
-      ${cardHtml('🧱 Ladrillo cocido en 3D', 'Arrastrá para rotar · rueda para acercar', toolbarVisor() + '<div class="visor" id="visor"><div class="procesando"><span class="spin"></span>Cargando geometría…</div></div>', '', `<div class="acciones" style="margin:0"><button class="btn ghost" id="btnPng" title="Descargar imagen">🖼️ PNG</button></div>`)}
-      <div class="col">${cardHtml('🔗 Versiones', `${tl.length} en la línea`, `<div class="timeline">${tl.map(x => `<a href="#/molde/${encodeURIComponent(x.id)}" class="${x.id === m.id ? 'yo' : ''}"><span class="nodo"></span><span class="info"><b>${esc(etiquetaMolde(x))}</b><small>${estadoDe(x.estado).e} ${esc(x.estado || '')} · ${fmt(num(x.huecos))} huecos · ${fmt(num(x.vacio), 1)}%</small></span></a>`).join('')}</div>`)}
-        ${cardHtml('⚙️ Parámetros aplicados', r.p.propios.length ? 'Los marcados son propios de este molde' : 'Heredados del tipo', `<div class="det">${[['contrH', 'Contr. horizontal', '%', 1], ['contrV', 'Contr. vertical', '%', 1], ['contrL', 'Contr. longitudinal', '%', 1], ['largo', 'Largo cocido', 'mm', 0], ['densidad', 'Densidad', 'g/cm³', 2]].map(([k, l, u, d]) => `<div><span>${l}</span><b class="${r.p.propios.includes(k) ? 'propio' : ''}">${fmt(r.p[k], d)} ${u}</b></div>`).join('')}</div>
-          <div class="acciones"><button class="btn" id="btnDxfC">📐 DXF cocido</button><button class="btn" id="btnDxfV">📐 DXF molde</button>${m.archivoUrl ? `<a class="btn" href="${esc(m.archivoUrl)}" target="_blank" rel="noopener">📄 Plano original</a>` : ''}</div>`, ' style="margin-top:16px"')}</div>
-    </div>
-    <div id="detalle"><div class="card" style="margin-top:16px"><div class="procesando"><span class="spin"></span>Calculando el ladrillo cocido…</div></div></div>
-    ${m.notas ? cardHtml('📝 Notas', '', `<p style="white-space:pre-wrap">${esc(m.notas)}</p>`, ' style="margin-top:16px"') : ''}
-  </section>`;
-  enlazarToolbar();
-  $('btnEditar').onclick = () => editarMolde(m);
-  $('btnBorrar').onclick = () => borrarMolde(m);
-  let geoV;
-  try { geoV = await geometriaDe(m.id); } catch (err) { $('detalle').innerHTML = `<div class="card" style="margin-top:16px"><div class="empty">⚠️ ${esc(err.message)}</div></div>`; $('visor').innerHTML = ''; return; }
-  if (ST.vista !== 'molde' || ST.args[0] !== id) return;
-  const mv = Geo.metricas(geoV);
-  const C = cocidoDe(m, geoV);
-  const mc = C.m;
-  $('detalle').innerHTML = `<div class="grid g2" style="margin-top:16px">
-      ${cardHtml('📐 Sección del ladrillo cocido', 'Medidas en mm · línea azul: contorno del molde', svgSeccion(C.geo, mc, { verde: { geo: geoV, ancho: mv.ancho, alto: mv.alto } }) + '<div class="ley"><span><i style="background:var(--c-ladrillo)"></i>Ladrillo cocido</span><span><i style="background:var(--c-verde)"></i>Molde (verde)</span></div>')}
-      ${cardHtml('🕳️ Huecos por tipo', `${mv.nHuecos} huecos en ${mv.tipos.length} medidas`, tablaHuecos(mv, mc))}
-    </div>
-    ${cardHtml('📋 Medidas del molde y del ladrillo cocido', 'Calculadas desde la geometría del plano', tablaMedidas(mv, mc, C.p), ' style="margin-top:16px"')}`;
-  montarVisor($('visor'), C.geo, mc, geoV, mv);
-  const base = nombreArchivo(etiquetaMolde(m));
-  const notas = [`${t.nombre || ''} - ${etiquetaMolde(m)}`, `Contraccion H ${C.p.contrH}% V ${C.p.contrV}% - largo ${C.p.largo} mm - densidad ${C.p.densidad}`, `Seccion ${mc.ancho.toFixed(2)} x ${mc.alto.toFixed(2)} mm - huecos ${mc.nHuecos} - vacio ${mc.vacio.toFixed(2)}% - peso ${mc.peso.toFixed(2)} kg`];
-  $('btnDxfC').onclick = () => descargar(base + '_cocido.dxf', Geo.dxfR12(C.geo, 'LADRILLO COCIDO ' + notas[0], notas.slice(1)), 'application/dxf');
-  $('btnDxfV').onclick = () => descargar(base + '_molde.dxf', Geo.dxfR12(geoV, 'MOLDE (VERDE) ' + notas[0], [`Seccion ${mv.ancho.toFixed(2)} x ${mv.alto.toFixed(2)} mm - huecos ${mv.nHuecos} - vacio ${mv.vacio.toFixed(2)}%`]), 'application/dxf');
-  $('btnPng').onclick = () => { if (ST.visor) descargar(base + '_3D.png', ST.visor.captura()); };
-}
-
 function opcionesTipos(sel, conNuevo) {
   return ST.tipos.map(t => `<option value="${esc(t.id)}" ${t.id === sel ? 'selected' : ''}>${esc((t.familia ? t.familia + ' · ' : '') + t.nombre)}</option>`).join('') + (conNuevo ? '<option value="__nuevo">＋ Nuevo tipo…</option>' : '');
 }
@@ -368,7 +239,7 @@ function opcionesPadre(tipoId, sel, excluir) {
   return `<option value="">— Sin versión anterior —</option>` + ms.map(m => `<option value="${esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${esc(etiquetaMolde(m))}</option>`).join('');
 }
 
-function camposMeta(m, prefijo) {
+function camposMeta(m, prefijo, compacto) {
   const p = prefijo || 'm';
   const tid = m.tipoId || (ST.tipos[0] || {}).id || '';
   const t = tipoDe(tid) || {};
@@ -382,11 +253,13 @@ function camposMeta(m, prefijo) {
     <label class="f">🧬 Versión<input id="${p}Version" maxlength="60" value="${esc(v('version'))}" placeholder="P.12 v3"></label>
     <label class="f">🔗 Versión anterior<select id="${p}Padre">${opcionesPadre(tid, padreSel, m.id)}</select></label>
     <label class="f">🚦 Estado<select id="${p}Estado">${ESTADOS.map(e => `<option ${e.id === (m.estado || 'Propuesta') ? 'selected' : ''}>${e.id}</option>`).join('')}</select></label>
+    <div class="full" id="${p}NuevoTipo" hidden><p class="sub" style="margin:4px 0 8px">Nuevo tipo de ladrillo: estos parámetros se aplican a todos sus moldes.</p>${camposTipo(ST.tipos.length ? {} : PRESET_TIPO, p + 'NT')}</div>
+    ${compacto ? `<details class="mas full"><summary>📎 Más datos (proveedor, fecha, autor, notas)</summary><div class="form" style="margin-top:10px">` : ''}
     <label class="f">🏭 Proveedor<input id="${p}Proveedor" maxlength="80" value="${esc(v('proveedor'))}" placeholder="Bongioanni Stampi"></label>
     <label class="f">📅 Fecha del plano<input id="${p}Fecha" type="date" value="${esc(String(v('fecha')).slice(0, 10))}"></label>
     <label class="f">✍️ Dibujó / autor<input id="${p}Autor" maxlength="60" value="${esc(v('autor'))}"></label>
     <label class="f full">📝 Notas<textarea id="${p}Notas" rows="2" maxlength="2000">${esc(v('notas'))}</textarea></label>
-    <div class="full" id="${p}NuevoTipo" hidden>${camposTipo({}, p + 'NT')}</div>
+    ${compacto ? '</div></details>' : ''}
     <details class="mas full" ${['contrH', 'contrV', 'contrL', 'largo', 'densidad'].some(k => num(m[k]) !== null) ? 'open' : ''}><summary>⚙️ Parámetros propios de este molde (vacío = usar los del tipo)</summary>
       <div class="form" style="margin-top:10px">
         <label class="f">Contr. horizontal (%)<input id="${p}contrH" type="number" step="0.01" value="${esc(v('contrH'))}" placeholder="${ph('contrH')}"></label>
@@ -395,27 +268,6 @@ function camposMeta(m, prefijo) {
         <label class="f">Largo cocido (mm)<input id="${p}largo" type="number" step="0.1" value="${esc(v('largo'))}" placeholder="${ph('largo')}"></label>
         <label class="f">Densidad (g/cm³)<input id="${p}densidad" type="number" step="0.01" value="${esc(v('densidad'))}" placeholder="${ph('densidad')}"></label>
       </div></details></div>`;
-}
-
-function camposTipo(t, p) {
-  const v = k => (t[k] === undefined || t[k] === null) ? '' : t[k];
-  return `<div class="form">
-    <label class="f">Familia<input id="${p}familia" maxlength="40" value="${esc(v('familia'))}" placeholder="Portante" list="lFam"></label>
-    <label class="f">Nombre<input id="${p}nombre" maxlength="60" value="${esc(v('nombre'))}" placeholder="Portante 12×19×33"></label>
-    <label class="f">Medida nominal<input id="${p}nominal" maxlength="40" value="${esc(v('nominal'))}" placeholder="12 × 19 × 33 cm"></label>
-    <label class="f">Línea / máquina<input id="${p}linea" maxlength="40" value="${esc(v('linea'))}" placeholder="Extrusora 1"></label>
-    <label class="f">Largo cocido (mm)<input id="${p}largo" type="number" step="0.1" value="${esc(v('largo'))}" placeholder="190"></label>
-    <label class="f">Contr. horizontal (%)<input id="${p}contrH" type="number" step="0.01" value="${esc(v('contrH'))}" placeholder="4.2"></label>
-    <label class="f">Contr. vertical (%)<input id="${p}contrV" type="number" step="0.01" value="${esc(v('contrV'))}" placeholder="4.8"></label>
-    <label class="f">Contr. longitudinal (%)<input id="${p}contrL" type="number" step="0.01" value="${esc(v('contrL'))}" placeholder="4.2"></label>
-    <label class="f">Densidad cocido (g/cm³)<input id="${p}densidad" type="number" step="0.01" value="${esc(v('densidad'))}" placeholder="1.80"></label>
-    <label class="f full">Notas<input id="${p}notas" maxlength="300" value="${esc(v('notas'))}"></label>
-  </div><datalist id="lFam">${[...familias().keys()].map(f => `<option value="${esc(f)}">`).join('')}</datalist>`;
-}
-
-function leerTipo(p) {
-  const g = k => { const el = $(p + k); return el ? el.value.trim() : ''; };
-  return { familia: g('familia'), nombre: g('nombre'), nominal: g('nominal'), linea: g('linea'), largo: g('largo'), contrH: g('contrH'), contrV: g('contrV'), contrL: g('contrL'), densidad: g('densidad'), notas: g('notas') };
 }
 
 function leerMeta(p) {
@@ -484,178 +336,13 @@ async function borrarMolde(m) {
   } catch (err) { toast(err.message, 'bad'); } finally { loader(false); }
 }
 
-function vistaCargar() {
-  const C = ST.carga || (ST.carga = { paso: 1, giro: 0, espejo: false, meta: {} });
-  const q = new URLSearchParams((location.hash.split('?')[1]) || '');
-  if (q.get('tipo') && !C.meta.tipoId) C.meta.tipoId = q.get('tipo');
-  app().innerHTML = `<section class="vista">${bannerLocal()}
-    <div class="hero"><div><div class="eyebrow">Nuevo molde</div><h1>Cargar <span>plano</span></h1><p class="sub">Subí el PDF o el DXF exportado de AutoCAD. La app detecta el marco y los dados, calcula el ladrillo cocido y lo guarda en el catálogo.</p></div></div>
-    <div class="card"><div class="paso"><span class="nro">1</span><h3>Plano del molde</h3></div>
-      <label class="drop" id="drop"><span class="e">📄</span><b>${C.archivo ? esc(C.archivo.nombre) : 'Arrastrá el archivo o tocá para elegirlo'}</b><small>${C.archivo ? fmt(C.archivo.size / 1024) + ' KB · ' + (C.lect ? C.lect.tipo.toUpperCase() + ' · ' + C.lect.capas.length + ' capas/estilos' : '') : 'PDF vectorial (exportado de AutoCAD) o DXF ASCII'}</small><input type="file" id="fArch" accept=".pdf,.dxf,application/pdf" hidden></label>
-      <div id="estadoCarga"></div></div>
-    <div id="paso2"></div>
-  </section>`;
-  const drop = $('drop');
-  $('fArch').onchange = e => { if (e.target.files[0]) leerArchivo(e.target.files[0]); };
-  drop.ondragover = e => { e.preventDefault(); drop.classList.add('sobre'); };
-  drop.ondragleave = () => drop.classList.remove('sobre');
-  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('sobre'); if (e.dataTransfer.files[0]) leerArchivo(e.dataTransfer.files[0]); };
-  if (C.ext) pintarPaso2();
-}
-
 function procesando(txt) { return `<div class="procesando"><span class="spin"></span>${esc(txt)}</div>`; }
-
-async function leerArchivo(f) {
-  const C = ST.carga = { paso: 1, giro: 0, espejo: false, meta: (ST.carga && ST.carga.meta) || {} };
-  const ext = (f.name.split('.').pop() || '').toLowerCase();
-  if (!['pdf', 'dxf'].includes(ext)) { toast('Formato no soportado: usá PDF o DXF', 'bad'); return; }
-  C.archivo = { nombre: f.name, size: f.size, mime: f.type || (ext === 'pdf' ? 'application/pdf' : 'application/dxf') };
-  vistaCargar();
-  $('estadoCarga').innerHTML = procesando('Leyendo el plano…');
-  try {
-    const buf = await f.arrayBuffer();
-    C.buf = buf;
-    if (ext === 'pdf') C.lect = await Geo.leerPdf(buf.slice(0));
-    else {
-      const txt = new TextDecoder('utf-8').decode(buf);
-      if (/^AutoCAD Binary DXF/.test(txt.slice(0, 22))) throw new Error('El DXF es binario: exportalo como DXF ASCII');
-      C.lect = Geo.leerDxf(txt);
-    }
-    if (!C.lect.capas.length) throw new Error('El archivo no tiene trazos vectoriales (¿es un PDF escaneado?)');
-    await detectar();
-  } catch (err) {
-    $('estadoCarga').innerHTML = `<div class="alerta bad" style="margin-top:12px"><span class="e">⚠️</span><span>${esc(err.message)}</span></div>`;
-  }
-}
-
-async function detectar() {
-  const C = ST.carga;
-  $('estadoCarga').innerHTML = procesando('Buscando el marco y los dados…');
-  $('paso2').innerHTML = '';
-  await new Promise(r => setTimeout(r, 30));
-  try {
-    C.base = await Geo.extraer(C.lect, { capas: C.capasSel || null });
-    C.capasSel = C.base.capas;
-    if (C.lect.tipo === 'pdf' && !C.anchoMm) {
-      const t = tipoDe(C.meta.tipoId) || ST.tipos[0];
-      const ref = t ? ST.moldes.filter(m => m.tipoId === t.id && num(m.anchoV)).sort((a, b) => String(b.actualizado).localeCompare(String(a.actualizado)))[0] : null;
-      if (ref) { C.anchoMm = +num(ref.anchoV).toFixed(2); C.altoMm = +num(ref.altoV).toFixed(2); C.escalaRef = etiquetaMolde(ref); }
-    }
-    $('estadoCarga').innerHTML = '';
-    recalcular();
-    pintarPaso2();
-  } catch (err) {
-    $('estadoCarga').innerHTML = `<div class="alerta bad" style="margin-top:12px"><span class="e">⚠️</span><span>${esc(err.message)}</span></div>`;
-    C.ext = null;
-    pintarCapasSolo();
-  }
-}
-
-function recalcular() {
-  const C = ST.carga;
-  C.ext = Geo.reorientar(C.base, C.giro, C.espejo);
-  const pdf = C.lect.tipo === 'pdf';
-  const esc0 = Geo.escalarMm(C.ext, pdf ? (C.anchoMm || null) : (C.anchoMm || null), C.altoMm || null);
-  C.esc = esc0;
-  C.geoV = esc0.geo;
-  C.met = Geo.metricas(C.geoV);
-}
-
-function htmlCapas() {
-  const C = ST.carga;
-  return `<div class="capas" id="lCapas">${C.lect.capas.slice().sort((a, b) => b.largo - a.largo).map(c => `<label><input type="checkbox" value="${esc(c.key)}" ${C.capasSel && C.capasSel.includes(c.key) ? 'checked' : ''}><span class="sw" style="background:${esc(c.color)}"></span>${esc(c.nombre)}<small>${c.polys.length}</small></label>`).join('')}</div>
-    <div class="acciones"><button class="btn" id="btnRedetectar">🔍 Volver a detectar</button></div>`;
-}
-
-function pintarCapasSolo() {
-  $('paso2').innerHTML = cardHtml('🎨 Capas del plano', 'Elegí las capas o colores donde está dibujado el molde', htmlCapas(), ' style="margin-top:16px"');
-  enlazarCapas();
-}
-
-function enlazarCapas() {
-  $('btnRedetectar').onclick = () => {
-    const sel = [...$('lCapas').querySelectorAll('input:checked')].map(i => i.value);
-    if (!sel.length) { toast('Elegí al menos una capa', 'warn'); return; }
-    ST.carga.capasSel = sel;
-    detectar();
-  };
-}
-
-function pintarPaso2() {
-  const C = ST.carga;
-  const m = C.met, pdf = C.lect.tipo === 'pdf';
-  const desv = C.altoMm ? (m.alto - C.altoMm) / C.altoMm * 100 : null;
-  const avisoEsc = pdf && !C.anchoMm ? '<div class="alerta warn" style="margin-top:10px"><span class="e">📏</span><span>El PDF no trae la escala: cargá el ancho y el alto reales del molde (las cotas generales del plano).</span></div>' : '';
-  const avisoAlto = desv !== null && Math.abs(desv) > 0.5 ? `<div class="alerta warn" style="margin-top:10px"><span class="e">⚠️</span><span>Con ese ancho, el alto medido da ${fmt(m.alto, 2)} mm (${desv > 0 ? '+' : ''}${fmt(desv, 2)} %). Revisá las cotas o la orientación.</span></div>` : '';
-  $('paso2').innerHTML = `<div class="grid g-21" style="margin-top:16px">
-    ${cardHtml('<span class="nro" style="margin-right:6px">2</span> Geometría detectada', `${m.nHuecos} huecos · ${m.tipos.length} medidas · resolución ${fmt(C.esc.resolMm, 3)} mm`, `<div class="prev-geo">${svgSeccion(C.geoV, m, {})}</div>
-      <div class="tb" style="margin-top:10px"><button class="btn" id="bRot">↻ Rotar 90°</button><button class="btn" id="bEsp">⇋ Espejar</button></div>
-      <div class="det"><div><span>Ancho</span><b>${fmt(m.ancho, 2)} mm</b></div><div><span>Alto</span><b>${fmt(m.alto, 2)} mm</b></div><div><span>% huecos</span><b>${fmt(m.vacio, 2)} %</b></div><div><span>Lleno</span><b>${fmt(m.aLleno)} mm²</b></div><div><span>Pared mín.</span><b>${fmt(m.paredMin, 2)} mm</b></div><div><span>Tabique mín.</span><b>${fmt(m.tabMin, 2)} mm</b></div></div>
-      <details class="mas"><summary>🕳️ Huecos por tipo</summary><div class="tw" style="margin-top:8px"><table><thead><tr><th>Tipo</th><th class="n">Cant.</th><th class="n">Medida</th><th class="n">Área</th></tr></thead><tbody>${m.tipos.map(t => `<tr><td><b>${t.letra}</b></td><td class="n">${t.n}</td><td class="n">${dims2(t.w, t.h)}</td><td class="n">${fmt(t.a)} mm²</td></tr>`).join('')}</tbody></table></div></details>`)}
-    <div class="col">
-      ${cardHtml('📏 Escala', pdf ? 'Medidas exteriores reales del molde' : 'El DXF ya viene en milímetros', `<div class="form"><label class="f">Ancho (mm)<input id="eAncho" type="number" step="0.01" value="${C.anchoMm || ''}" placeholder="${pdf ? '344' : fmt(m.ancho, 2)}"></label><label class="f">Alto (mm)<input id="eAlto" type="number" step="0.01" value="${C.altoMm || ''}" placeholder="${pdf ? '125' : fmt(m.alto, 2)}"></label></div>${C.escalaRef && pdf ? `<p class="sub" style="margin-top:6px">Tomado de ${esc(C.escalaRef)}. Cambialo si el plano es de otra medida.</p>` : ''}${avisoEsc}${avisoAlto}<div class="acciones"><button class="btn" id="bEsc">✔️ Aplicar escala</button></div>`)}
-      ${cardHtml('🎨 Capas usadas', 'Detectadas automáticamente', htmlCapas(), ' style="margin-top:16px"')}
-    </div></div>
-    <div class="card" style="margin-top:16px"><div class="paso"><span class="nro">3</span><h3>Datos del molde y enlace</h3></div>${camposMeta(C.meta, 'c')}
-      <div class="paso" style="margin-top:18px"><span class="nro">4</span><h3>Ladrillo cocido</h3></div><div id="cPrev"></div>
-      ${modoLocal() ? '' : `<label class="chk" style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="cSubir" checked> Guardar el plano original en Drive (carpeta «Matrices CEVIL - Planos»)</label>`}
-      <div class="acciones"><button class="btn" id="bCancelar">🧹 Empezar de nuevo</button><button class="btn pri brillo" id="bGuardar" ${pdf && !C.anchoMm ? 'disabled' : ''}>💾 Guardar en el catálogo</button></div></div>`;
-  $('bRot').onclick = () => { C.giro = (C.giro + 90) % 360; recalcular(); guardarMetaTemp(); pintarPaso2(); };
-  $('bEsp').onclick = () => { C.espejo = !C.espejo; recalcular(); guardarMetaTemp(); pintarPaso2(); };
-  $('bEsc').onclick = () => { C.anchoMm = num($('eAncho').value); C.altoMm = num($('eAlto').value); C.escalaRef = null; recalcular(); guardarMetaTemp(); pintarPaso2(); };
-  enlazarCapas();
-  enlazarMeta('c', null, previaCocido);
-  $('cCodigo').oninput = guardarMetaTemp;
-  $('bCancelar').onclick = () => { ST.carga = null; vistaCargar(); };
-  $('bGuardar').onclick = guardarCarga;
-}
-
-function guardarMetaTemp() {
-  if (!$('cTipo')) return;
-  const C = ST.carga;
-  C.meta = Object.assign(C.meta || {}, leerMeta('c'));
-}
-
-function previaCocido() {
-  const C = ST.carga;
-  if (!C || !C.geoV || !$('cPrev')) return;
-  guardarMetaTemp();
-  const meta = C.meta;
-  let tipos = ST.tipos;
-  if (meta.tipoId === '__nuevo') tipos = ST.tipos.concat([Object.assign({ id: '__nuevo' }, leerTipo('cNT'))]);
-  const p = paramsDe(meta, tipos);
-  if (!p.largo) { $('cPrev').innerHTML = '<div class="alerta warn"><span class="e">📏</span><span>Falta el largo cocido del tipo para calcular volumen y peso.</span></div>'; return; }
-  const c = Geo.cocer(C.geoV, p);
-  $('cPrev').innerHTML = `<div class="kpis">${kpiHtml('📐', 'Sección cocida', dims2(c.m.ancho, c.m.alto), 'mm')}${kpiHtml('📏', 'Largo', fmt(p.largo), 'mm', 'corte en verde ≈ ' + fmt(c.m.corteVerde, 1))}${kpiHtml('🕳️', 'Huecos', fmt(c.m.nHuecos), '', fmt(c.m.vacio, 1) + ' %')}${kpiHtml('⚖️', 'Peso', fmt(c.m.peso, 2), 'kg', fmt(p.densidad, 2) + ' g/cm³')}${kpiHtml('🔥', 'Contracción', fmt(p.contrH, 1) + ' / ' + fmt(p.contrV, 1), '%')}</div>`;
-}
 
 function aBase64(buf) {
   const b = new Uint8Array(buf);
   let s = '';
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
   return btoa(s);
-}
-
-async function guardarCarga() {
-  const C = ST.carga;
-  const btn = $('bGuardar');
-  btn.disabled = true;
-  loader(true);
-  try {
-    const meta = leerMeta('c');
-    if (!meta.codigo) throw new Error('Completá el código del molde');
-    meta.tipoId = await asegurarTipo(meta, 'c');
-    const geo = { marco: C.geoV.marco.map(([x, y]) => [+x.toFixed(3), +y.toFixed(3)]), huecos: C.geoV.huecos.map(h => h.map(([x, y]) => [+x.toFixed(3), +y.toFixed(3)])) };
-    const prep = prepararMolde(meta, geo);
-    const sub = $('cSubir') && $('cSubir').checked && C.buf && C.archivo.size < 25e6;
-    prep.molde.archivo = C.archivo.nombre;
-    const r = await API.enviar({ accion: 'guardarMolde', molde: prep.molde, geo: prep.geo, archivoDatos: sub ? { nombre: C.archivo.nombre, mime: C.archivo.mime, base64: aBase64(C.buf) } : null });
-    ST.geo[r.id] = prep.geo;
-    toast(r.msg || 'Guardado', 'ok');
-    ST.carga = null;
-    await cargar(true);
-    location.hash = '#/molde/' + encodeURIComponent(r.id);
-  } catch (err) { toast(err.message, 'bad'); btn.disabled = false; } finally { loader(false); }
 }
 
 function opcionesMoldes(sel) {
@@ -704,54 +391,10 @@ async function vistaComparar(a, b) {
   ${cardHtml('📊 Diferencias del ladrillo cocido', 'B − A · verde: mejora (menos peso, más pared o tabique) · naranja: empeora', `<div class="tw"><table><thead><tr><th>Medida</th><th class="n">A</th><th class="n">B</th><th class="n">Δ</th><th class="n">Δ %</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`, ' style="margin-top:16px"')}`;
 }
 
-function vistaTipos() {
-  app().innerHTML = `<section class="vista">${bannerLocal()}
-    <div class="hero"><div><div class="eyebrow">Parámetros de planta</div><h1>Tipos de <span>ladrillo</span></h1><p class="sub">Contracción de secado + cocción, largo cocido y densidad. Todos los moldes del tipo se recalculan solos al cambiarlos.</p></div>
-      <div class="acciones"><button class="btn pri" id="bNuevoT">＋ Nuevo tipo</button></div></div>
-    <div id="nuevoT"></div>
-    ${ST.tipos.map((t, i) => cardHtml(`🏷️ ${esc(t.nombre)}`, `${esc(t.familia || '')} · ${ST.moldes.filter(m => m.tipoId === t.id).length} molde(s) · ${esc(t.id)}`, camposTipo(t, 't' + i) + `<div class="acciones"><button class="btn" data-borrar="${esc(t.id)}">🗑️ Borrar</button><button class="btn pri" data-guardar="${i}">💾 Guardar</button></div>`, ' style="margin-top:16px"')).join('') || '<div class="card"><div class="empty">Todavía no hay tipos.</div></div>'}
-  </section>`;
-  $('bNuevoT').onclick = () => {
-    $('nuevoT').innerHTML = cardHtml('＋ Nuevo tipo', '', camposTipo({}, 'tn') + '<div class="acciones"><button class="btn pri" id="bGuardarTN">💾 Crear</button></div>');
-    $('bGuardarTN').onclick = () => guardarTipoUI(leerTipo('tn'));
-  };
-  app().querySelectorAll('[data-guardar]').forEach(b => { b.onclick = () => { const i = +b.dataset.guardar; guardarTipoUI(Object.assign({ id: ST.tipos[i].id }, leerTipo('t' + i))); }; });
-  app().querySelectorAll('[data-borrar]').forEach(b => {
-    b.onclick = async () => {
-      if (!await confirmar('¿Borrar el tipo ' + (tipoDe(b.dataset.borrar) || {}).nombre + '?')) return;
-      loader(true);
-      try { toast((await API.enviar({ accion: 'borrarTipo', id: b.dataset.borrar })).msg, 'ok'); await cargar(true); } catch (err) { toast(err.message, 'bad'); } finally { loader(false); }
-    };
-  });
-}
-
 async function guardarTipoUI(t) {
   if (!t.nombre) { toast('El tipo necesita un nombre', 'warn'); return; }
   loader(true);
   try { toast((await API.enviar({ accion: 'guardarTipo', tipo: t })).msg, 'ok'); await cargar(true); } catch (err) { toast(err.message, 'bad'); } finally { loader(false); }
-}
-
-function vistaAjustes() {
-  const c = conexion();
-  app().innerHTML = `<section class="vista">
-    <div class="hero"><div><div class="eyebrow">Configuración</div><h1>Ajustes y <span>conexión</span></h1><p class="sub">${modoLocal() ? 'Ahora trabajás en modo local (solo este navegador).' : 'Conectado a la planilla por Apps Script.'}</p></div></div>
-    ${cardHtml('🔌 Conexión con la planilla', 'URL /exec de la aplicación web de Apps Script y clave (se guardan solo en este navegador)', `<form class="form" id="formCx" autocomplete="off"><label class="f w2">URL /exec<input id="cUrl" type="url" value="${esc(c.url || '')}" placeholder="https://script.google.com/macros/s/.../exec"></label><label class="f">Clave<input id="cKey" type="password" value="${esc(c.key || '')}" placeholder="Opcional"></label><label class="f">👤 Tu nombre<input id="cUsu" maxlength="60" value="${esc(c.usuario || '')}"></label>
-      <div class="full acciones" style="margin-top:0"><button class="btn" type="button" id="bLocal">💾 Usar modo local</button><button class="btn pri" type="submit">🔌 Guardar y probar</button></div></form>`)}
-    ${cardHtml('📥 Catálogo inicial', 'Tipo «Portante 12×19×33» y sus 4 moldes: original Bongioanni MPA-06, Rev. B, P.12 y P.12 con extremos partidos', `<div class="acciones"><button class="btn pri" id="bSeed2">📥 Importar</button></div>`, ' style="margin-top:16px"')}
-    ${cardHtml('🗄️ Respaldo', 'Descarga todos los tipos, moldes y geometrías en un archivo JSON', `<div class="acciones"><button class="btn" id="bBackup">⬇️ Descargar respaldo</button><button class="btn" id="bCache">🧹 Borrar caché local de geometrías</button></div>`, ' style="margin-top:16px"')}
-  </section>`;
-  $('formCx').onsubmit = async e => {
-    e.preventDefault();
-    LS.set('mt_url', $('cUrl').value.trim()); LS.set('mt_key', $('cKey').value.trim()); LS.set('mt_usuario', $('cUsu').value.trim());
-    ST.geo = {};
-    await cargar(true);
-    if (ST.cargado) toast(modoLocal() ? 'Modo local' : 'Conexión correcta', 'ok');
-  };
-  $('cUsu').onchange = e => LS.set('mt_usuario', e.target.value.trim());
-  $('bLocal').onclick = async () => { LS.set('mt_url', ''); LS.set('mt_key', ''); ST.geo = {}; await cargar(true); toast('Modo local activado', 'ok'); };
-  $('bSeed2').onclick = importarSeed;
-  $('bBackup').onclick = respaldo;
-  $('bCache').onclick = () => { Object.keys(localStorage).filter(k => k.startsWith('mt_geo_')).forEach(k => LS.del(k)); ST.geo = {}; toast('Caché borrada', 'ok'); };
 }
 
 async function importarSeed() {
@@ -774,27 +417,6 @@ async function respaldo() {
     for (const m of ST.moldes) geos[m.id] = await geometriaDe(m.id);
     descargar('matrices_respaldo_' + hoyLocal() + '.json', JSON.stringify({ fecha: new Date().toISOString(), tipos: ST.tipos, moldes: ST.moldes, geos }), 'application/json');
   } catch (err) { toast(err.message, 'bad'); } finally { loader(false); }
-}
-
-function leerRuta() {
-  const h = location.hash.replace(/^#\/?/, '').split('?')[0];
-  const partes = h.split('/').filter(Boolean).map(decodeURIComponent);
-  const v = partes[0] || 'catalogo';
-  return { v: ['catalogo', 'molde', 'cargar', 'comparar', 'tipos', 'ajustes'].includes(v) ? v : 'catalogo', args: partes.slice(1) };
-}
-
-function render() {
-  const r = leerRuta();
-  ST.vista = r.v; ST.args = r.args;
-  pintarNav();
-  if (ST.visor) { ST.visor.destruir(); ST.visor = null; }
-  if (!ST.cargado && ST.vista !== 'ajustes') { app().innerHTML = `<section class="vista"><div class="card">${procesando('Cargando catálogo…')}</div></section>`; return; }
-  if (ST.vista === 'catalogo') vistaCatalogo();
-  else if (ST.vista === 'molde') vistaMolde(ST.args[0]);
-  else if (ST.vista === 'cargar') vistaCargar();
-  else if (ST.vista === 'comparar') vistaComparar(ST.args[0], ST.args[1]);
-  else if (ST.vista === 'tipos') vistaTipos();
-  else vistaAjustes();
 }
 
 function ocultarSplash() {
@@ -826,9 +448,10 @@ async function cargar(forzar) {
 
 function aplicar(d) {
   ST.tipos = (d.tipos || []).map(t => Object.assign({}, t, { contrH: num(t.contrH), contrV: num(t.contrV), contrL: num(t.contrL), largo: num(t.largo), densidad: num(t.densidad) }));
+  ST.tipos.forEach(t => { t.anchoMolde = num(t.anchoMolde); t.altoMolde = num(t.altoMolde); });
   ST.moldes = (d.moldes || []).map(m => Object.assign({}, m, { metricas: typeof m.metricas === 'string' ? (() => { try { return JSON.parse(m.metricas); } catch (e) { return null; } })() : m.metricas }));
   ST.cargado = true;
-  const enCarga = ST.vista === 'cargar' && ST.carga && ST.carga.ext;
+  const enCarga = ST.vista === 'nuevo' && ST.carga && ST.carga.lect;
   if (!enCarga) render();
 }
 
@@ -843,6 +466,514 @@ function init() {
   if (!location.hash) history.replaceState(null, '', '#/catalogo');
   render();
   cargar(false);
+}
+
+const PRESET_TIPO = { familia: 'Portante', nombre: 'Portante 12×19×33', nominal: '12 × 19 × 33 cm', linea: '', anchoMolde: 344, altoMolde: 125, largo: 190, contrH: 4.2, contrV: 4.8, contrL: 4.2, densidad: 1.8, notas: '' };
+
+function pintarNav() {
+  const v = ST.vista === 'molde' ? 'catalogo' : ST.vista;
+  $('nav').innerHTML = VISTAS.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}" title="${x.n}"><span class="e">${x.e}</span><span class="tx">${x.n}</span></a>`).join('');
+  $('bnav').innerHTML = BNAV.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}"><span class="e">${x.e}</span>${x.n}</a>`).join('');
+  requestAnimationFrame(() => requestAnimationFrame(() => moverPill($('nav'))));
+}
+
+function camposTipo(t, p) {
+  const v = k => (t[k] === undefined || t[k] === null) ? '' : t[k];
+  return `<div class="form">
+    <label class="f">Nombre<input id="${p}nombre" maxlength="60" value="${esc(v('nombre'))}" placeholder="Portante 12×19×33"></label>
+    <label class="f">Familia<input id="${p}familia" maxlength="40" value="${esc(v('familia'))}" placeholder="Portante" list="lFam"></label>
+    <label class="f">Medida nominal<input id="${p}nominal" maxlength="40" value="${esc(v('nominal'))}" placeholder="12 × 19 × 33 cm"></label>
+    <label class="f">Ancho del molde (mm)<input id="${p}anchoMolde" type="number" step="0.01" value="${esc(v('anchoMolde'))}" placeholder="344"></label>
+    <label class="f">Alto del molde (mm)<input id="${p}altoMolde" type="number" step="0.01" value="${esc(v('altoMolde'))}" placeholder="125"></label>
+    <label class="f">Largo cocido (mm)<input id="${p}largo" type="number" step="0.1" value="${esc(v('largo'))}" placeholder="190"></label>
+    <label class="f">Contracción horizontal (%)<input id="${p}contrH" type="number" step="0.01" value="${esc(v('contrH'))}" placeholder="4.2"></label>
+    <label class="f">Contracción vertical (%)<input id="${p}contrV" type="number" step="0.01" value="${esc(v('contrV'))}" placeholder="4.8"></label>
+    <label class="f">Contracción longitudinal (%)<input id="${p}contrL" type="number" step="0.01" value="${esc(v('contrL'))}" placeholder="4.2"></label>
+    <label class="f">Densidad del cocido (g/cm³)<input id="${p}densidad" type="number" step="0.01" value="${esc(v('densidad'))}" placeholder="1.80"></label>
+    <label class="f">Línea / máquina<input id="${p}linea" maxlength="40" value="${esc(v('linea'))}"></label>
+    <label class="f">Notas<input id="${p}notas" maxlength="300" value="${esc(v('notas'))}"></label>
+  </div><datalist id="lFam">${[...familias().keys()].map(f => `<option value="${esc(f)}">`).join('')}</datalist>`;
+}
+
+function leerTipo(p) {
+  const g = k => { const el = $(p + k); return el ? el.value.trim() : ''; };
+  return { familia: g('familia'), nombre: g('nombre'), nominal: g('nominal'), linea: g('linea'), anchoMolde: g('anchoMolde'), altoMolde: g('altoMolde'), largo: g('largo'), contrH: g('contrH'), contrV: g('contrV'), contrL: g('contrL'), densidad: g('densidad'), notas: g('notas') };
+}
+
+function dropHtml(id, chico) {
+  return `<label class="drop${chico ? ' chico' : ''}" id="${id}"><span class="e">📄</span><b>Soltá acá el plano del molde</b><small>PDF exportado de AutoCAD o DXF · también podés tocar para elegirlo</small><input type="file" accept=".pdf,.dxf,application/pdf" hidden></label>`;
+}
+
+function enlazarDrop(id) {
+  const d = $(id);
+  if (!d) return;
+  d.querySelector('input').onchange = e => { if (e.target.files[0]) iniciarCarga(e.target.files[0]); };
+  d.ondragover = e => { e.preventDefault(); d.classList.add('sobre'); };
+  d.ondragleave = () => d.classList.remove('sobre');
+  d.ondrop = e => { e.preventDefault(); d.classList.remove('sobre'); if (e.dataTransfer.files[0]) iniciarCarga(e.dataTransfer.files[0]); };
+}
+
+function vistaCatalogo() {
+  const fams = familias();
+  const chipsFam = fams.size > 1 ? [''].concat([...fams.keys()]).map(f => `<button type="button" class="chip ${ST.filtro.familia === f ? 'on' : ''}" data-fam="${esc(f)}">${f ? esc(f) : 'Todas'}</button>`).join('') : '';
+  const chipsEst = [''].concat(ESTADOS.map(e => e.id)).map(s => `<button type="button" class="chip ${ST.filtro.estado === s ? 'on' : ''}" data-est="${esc(s)}">${s ? estadoDe(s).e + ' ' + esc(s) : 'Todos'}</button>`).join('');
+  let cuerpo = '';
+  if (!ST.moldes.length) {
+    cuerpo = `<div class="card" style="margin-top:16px"><div class="empty"><span style="font-size:2rem">🗂️</span><b>Todavía no hay moldes guardados</b><span>Soltá un plano arriba: vas a ver el ladrillo cocido en 3D y lo podés guardar con su animación.</span><button class="btn ghost" id="btnSeed">o cargá los 4 moldes de ejemplo del portante 12×19×33</button></div></div>`;
+  } else {
+    for (const [fam, tipos] of fams) {
+      if (ST.filtro.familia && ST.filtro.familia !== fam) continue;
+      const bloques = tipos.map(t => {
+        const ms = ST.moldes.filter(m => m.tipoId === t.id);
+        if (!ms.length) return '';
+        const vis = ms.filter(filtrar);
+        if ((ST.filtro.q || ST.filtro.estado) && !vis.length) return '';
+        const visIds = new Set(vis.map(m => m.id));
+        const lin = linajes(ms).map(l => l.filter(m => visIds.has(m.id))).filter(l => l.length);
+        const params = `<div class="tipo-params"><span class="tag" title="Contracción horizontal / vertical">🔥 ${fmt(num(t.contrH), 1)} / ${fmt(num(t.contrV), 1)} %</span><span class="tag">📏 ${fmt(num(t.largo))} mm</span><span class="tag">⚖️ ${fmt(num(t.densidad), 2)} g/cm³</span></div>`;
+        const filas = lin.map(l => `<div class="linaje">${l.map((m, i) => {
+          if (!i) return cardMolde(m);
+          const directo = m.padreId === l[i - 1].id;
+          return `<span class="flecha-v" title="${directo ? 'Versión siguiente' : 'Rama'}">${directo ? '→' : '⑂'}</span>` + cardMolde(m, directo ? null : moldeDe(m.padreId));
+        }).join('')}</div>`).join('');
+        return cardHtml(`🏷️ ${esc(t.nombre)}`, `${esc(t.nominal || '')} · ${ms.length} molde${ms.length === 1 ? '' : 's'}`, filas, ' style="margin-top:12px"', params);
+      }).join('');
+      if (bloques.trim()) cuerpo += `<div class="fam-h"><h2>${esc(fam)}</h2></div>${bloques}`;
+    }
+    if (!cuerpo) cuerpo = '<div class="card" style="margin-top:16px"><div class="empty">No hay moldes que coincidan con el filtro.</div></div>';
+  }
+  app().innerHTML = `<section class="vista">${bannerLocal()}
+    <div class="hero"><div><div class="eyebrow">${esc(CONF.PLANTA || 'Planta')}</div><h1>Moldes de <span>extrusión</span></h1>
+      <p class="sub">Del plano del molde al ladrillo cocido en 3D. Cada molde queda guardado con su plano y su animación, agrupado por tipo de ladrillo.</p></div></div>
+    <div class="card">${dropHtml('dropCat', true)}</div>
+    ${ST.moldes.length ? `<div class="card" style="margin-top:16px"><div class="filtros" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <input id="fq" type="search" placeholder="🔎 Buscar código, versión, proveedor…" value="${esc(ST.filtro.q)}" style="flex:1;min-width:200px">
+      ${chipsFam ? `<div class="chips" id="cFam">${chipsFam}</div>` : ''}<div class="chips" id="cEst">${chipsEst}</div></div></div>` : ''}
+    ${cuerpo}</section>`;
+  enlazarDrop('dropCat');
+  if ($('fq')) $('fq').oninput = e => { ST.filtro.q = e.target.value; const pos = e.target.selectionStart; vistaCatalogo(); const n = $('fq'); n.focus(); n.setSelectionRange(pos, pos); };
+  if ($('cFam')) $('cFam').querySelectorAll('[data-fam]').forEach(b => { b.onclick = () => { ST.filtro.familia = b.dataset.fam; vistaCatalogo(); }; });
+  if ($('cEst')) $('cEst').querySelectorAll('[data-est]').forEach(b => { b.onclick = () => { ST.filtro.estado = b.dataset.est; vistaCatalogo(); }; });
+  if ($('btnSeed')) $('btnSeed').onclick = importarSeed;
+}
+
+function toolbarVisor() {
+  return `<div class="tb"><div class="seg" id="vPose"><button class="on" data-p="obra">🏗️ En obra</button><button data-p="extr">➡️ Saliendo de la extrusora</button></div>
+    <div class="seg" id="vTog"><button class="on" data-t="cotas">Cotas</button><button data-t="verde">Contorno del molde</button><button class="on" data-t="girar">Girar</button></div></div>`;
+}
+
+function enlazarToolbar() {
+  const c = $('vPose');
+  if (c) {
+    c.querySelectorAll('button').forEach(b => { b.onclick = () => { c.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); if (ST.visor) ST.visor.pose(b.dataset.p); moverPill(c); }; });
+    moverPill(c);
+  }
+  const t = $('vTog');
+  if (t) t.querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      b.classList.toggle('on');
+      const on = b.classList.contains('on');
+      if (!ST.visor) return;
+      if (b.dataset.t === 'girar') ST.visor.girar(on); else ST.visor.mostrar(b.dataset.t, on);
+    };
+  });
+}
+
+function montarVisor(host, geoC, mc, geoV, mv, titulo, subtitulo) {
+  conVisor(err => {
+    if (!host || !host.isConnected) return;
+    if (err) { host.innerHTML = `<div class="empty">⚠️ ${esc(err.message)}</div>`; return; }
+    if (ST.visor) ST.visor.destruir();
+    ST.visor = window.Visor3D.montar(host, { marco: geoC.marco, huecos: geoC.huecos, ancho: mc.ancho, alto: mc.alto, largo: mc.largo, verde: geoV ? { marco: geoV.marco, huecos: geoV.huecos, ancho: mv.ancho, alto: mv.alto } : null, titulo: titulo || '', subtitulo: subtitulo || `Ladrillo cocido ${fmt(mc.ancho, 1)} × ${fmt(mc.alto, 1)} × ${fmt(mc.largo)} mm · ${mc.nHuecos} huecos · ${fmt(mc.vacio, 1)} % · ${fmt(mc.peso, 2)} kg` });
+    const t = $('vTog');
+    if (t) t.querySelectorAll('button').forEach(b => { const on = b.classList.contains('on'); if (b.dataset.t === 'girar') ST.visor.girar(on); else ST.visor.mostrar(b.dataset.t, on); });
+    const c = $('vPose');
+    const p = c && c.querySelector('button.on');
+    if (p && p.dataset.p !== 'obra') ST.visor.pose(p.dataset.p);
+  });
+}
+
+function detCocido(mc, p) {
+  return `<div class="det grande">
+    <div class="full2"><span>Medidas del ladrillo cocido</span><b>${fmt(mc.ancho, 1)} × ${fmt(mc.alto, 1)} × ${fmt(mc.largo, 0)} mm</b></div>
+    <div><span>Huecos</span><b>${fmt(mc.nHuecos)}</b></div>
+    <div><span>Huecos sobre la sección</span><b>${fmt(mc.vacio, 1)} %</b></div>
+    <div><span>Peso estimado</span><b>${fmt(mc.peso, 2)} kg</b></div>
+    <div><span>Material por ladrillo</span><b>${fmt(mc.volumen)} cm³</b></div>
+    <div><span>Pared mínima</span><b>${fmt(mc.paredMin, 2)} mm</b></div>
+    <div><span>Tabique mínimo</span><b>${fmt(mc.tabMin, 2)} mm</b></div>
+  </div>
+  <p class="sub" style="margin-top:10px">Contracción ${fmt(p.contrH, 1)} % horizontal y ${fmt(p.contrV, 1)} % vertical · densidad ${fmt(p.densidad, 2)} g/cm³ · corte en verde ≈ ${fmt(mc.corteVerde, 1)} mm</p>`;
+}
+
+function tiposCarga() {
+  const C = ST.carga;
+  if (C && C.tipoId === '__nuevo') {
+    const nt = $('nNTnombre') ? leerTipo('nNT') : (ST.tipos.length ? {} : PRESET_TIPO);
+    return ST.tipos.concat([Object.assign({ id: '__nuevo' }, nt)]);
+  }
+  return ST.tipos;
+}
+
+function iniciarCarga(f) {
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  if (!['pdf', 'dxf'].includes(ext)) { toast('Formato no soportado: usá PDF o DXF', 'bad'); return; }
+  ST.carga = { file: f, archivo: { nombre: f.name, size: f.size, mime: f.type || (ext === 'pdf' ? 'application/pdf' : 'application/dxf'), ext }, giro: 0, espejo: false, meta: {}, estado: 'leyendo' };
+  if (location.hash.startsWith('#/nuevo')) pintarNuevo(); else location.hash = '#/nuevo';
+  procesarCarga();
+}
+
+async function procesarCarga() {
+  const C = ST.carga;
+  try {
+    const buf = await C.file.arrayBuffer();
+    C.buf = buf;
+    if (C.archivo.ext === 'pdf') C.lect = await Geo.leerPdf(buf.slice(0));
+    else {
+      const txt = new TextDecoder('utf-8').decode(buf);
+      if (/^AutoCAD Binary DXF/.test(txt.slice(0, 22))) throw new Error('El DXF es binario: guardalo como DXF ASCII desde AutoCAD');
+      C.lect = Geo.leerDxf(txt);
+    }
+    if (!C.lect.capas.length) throw new Error('El archivo no tiene dibujo vectorial (¿es un PDF escaneado?)');
+    C.estado = 'detectando';
+    if (ST.carga === C && ST.vista === 'nuevo') pintarNuevo();
+    await new Promise(r => setTimeout(r, 40));
+    C.base = await Geo.extraer(C.lect, { capas: C.capasSel || null });
+    C.capasSel = C.base.capas;
+    if (!C.tipoId) {
+      const ult = ST.moldes.slice().sort((a, b) => String(b.actualizado || '').localeCompare(String(a.actualizado || '')))[0];
+      C.tipoId = ult ? ult.tipoId : (ST.tipos[0] ? ST.tipos[0].id : '__nuevo');
+    }
+    escalaDesdeTipo();
+    recalcularCarga();
+    C.estado = 'listo';
+  } catch (err) {
+    C.estado = 'error';
+    C.error = err.message;
+  }
+  if (ST.carga === C && ST.vista === 'nuevo') pintarNuevo();
+}
+
+function escalaDesdeTipo() {
+  const C = ST.carga;
+  if (C.lect.tipo !== 'pdf' || C.escalaManual) return;
+  const t = tiposCarga().find(x => x.id === C.tipoId) || {};
+  if (num(t.anchoMolde) && num(t.altoMolde)) { C.anchoMm = num(t.anchoMolde); C.altoMm = num(t.altoMolde); C.escalaFuente = 'las medidas del molde del tipo «' + (t.nombre || 'nuevo') + '»'; return; }
+  const ref = ST.moldes.filter(m => m.tipoId === C.tipoId && num(m.anchoV)).sort((a, b) => String(b.actualizado).localeCompare(String(a.actualizado)))[0];
+  if (ref) { C.anchoMm = +num(ref.anchoV).toFixed(2); C.altoMm = +num(ref.altoV).toFixed(2); C.escalaFuente = 'el molde ' + etiquetaMolde(ref); return; }
+  C.anchoMm = PRESET_TIPO.anchoMolde; C.altoMm = PRESET_TIPO.altoMolde; C.escalaFuente = 'la medida estándar del portante (344 × 125 mm)';
+}
+
+function recalcularCarga() {
+  const C = ST.carga;
+  C.ext = Geo.reorientar(C.base, C.giro, C.espejo);
+  C.esc = Geo.escalarMm(C.ext, C.anchoMm || null, C.altoMm || null);
+  C.geoV = C.esc.geo;
+  C.met = Geo.metricas(C.geoV);
+  const meta = Object.assign({}, C.meta, { tipoId: C.tipoId });
+  C.p = paramsDe(meta, tiposCarga());
+  C.coc = Geo.cocer(C.geoV, C.p);
+}
+
+function avisoEscala() {
+  const C = ST.carga;
+  if (C.lect.tipo !== 'pdf') return '';
+  const desv = C.altoMm ? (C.met.alto - C.altoMm) / C.altoMm * 100 : 0;
+  if (Math.abs(desv) > 1) return `<div class="alerta warn"><span class="e">📏</span><span>Las proporciones del plano no coinciden con ${esc(C.escalaFuente || 'la escala')}: con ${fmt(C.anchoMm, 1)} mm de ancho, el alto da ${fmt(C.met.alto, 1)} mm en vez de ${fmt(C.altoMm, 1)} mm. Elegí el tipo correcto o corregí la medida del molde en «Revisar la lectura del plano».</span></div>`;
+  return `<p class="sub" style="margin-top:8px">📏 Escala tomada de ${esc(C.escalaFuente || 'la medida cargada')}: molde de ${fmt(C.met.ancho, 2)} × ${fmt(C.met.alto, 2)} mm.</p>`;
+}
+
+function revisionHtml() {
+  const C = ST.carga, m = C.met;
+  return `<div class="grid g-21">
+    <div><div class="prev-geo">${svgSeccion(C.geoV, m, {})}</div>
+      <div class="tb" style="margin-top:10px"><button class="btn" id="bRot">↻ Rotar 90°</button><button class="btn" id="bEsp">⇋ Espejar</button></div>
+      <div class="tw" style="margin-top:8px"><table><thead><tr><th>Hueco</th><th class="n">Cant.</th><th class="n">Medida en el molde</th></tr></thead><tbody>${m.tipos.map(t => `<tr><td><b>${t.letra}</b></td><td class="n">${t.n}</td><td class="n">${dims2(t.w, t.h)} mm</td></tr>`).join('')}</tbody></table></div></div>
+    <div><h3 style="margin-bottom:8px">📏 Medida exterior del molde</h3><div class="form"><label class="f">Ancho (mm)<input id="eAncho" type="number" step="0.01" value="${C.lect.tipo === 'pdf' ? (C.anchoMm || '') : ''}" placeholder="${fmt(m.ancho, 2)}"></label><label class="f">Alto (mm)<input id="eAlto" type="number" step="0.01" value="${C.lect.tipo === 'pdf' ? (C.altoMm || '') : ''}" placeholder="${fmt(m.alto, 2)}"></label></div>
+      <p class="sub">${C.lect.tipo === 'pdf' ? 'El PDF no trae la escala; se usan las cotas generales del molde.' : 'El DXF ya viene en milímetros; completalo solo si querés forzar otra medida.'}</p>
+      <div class="acciones"><button class="btn" id="bEsc">✔️ Aplicar medida</button></div>
+      <h3 style="margin:14px 0 8px">🎨 Capas del dibujo usadas</h3>
+      <div class="capas" id="lCapas">${C.lect.capas.slice().sort((a, b) => b.largo - a.largo).map(c => `<label><input type="checkbox" value="${esc(c.key)}" ${C.capasSel && C.capasSel.includes(c.key) ? 'checked' : ''}><span class="sw" style="background:${esc(c.color)}"></span>${esc(c.nombre)}<small>${c.polys.length}</small></label>`).join('')}</div>
+      <div class="acciones"><button class="btn" id="bRedetectar">🔍 Volver a detectar</button></div></div></div>`;
+}
+
+function enlazarRevision() {
+  const C = ST.carga;
+  const refrescar = () => { recalcularCarga(); actualizarResultado(true); };
+  if ($('bRot')) $('bRot').onclick = () => { C.giro = (C.giro + 90) % 360; refrescar(); };
+  if ($('bEsp')) $('bEsp').onclick = () => { C.espejo = !C.espejo; refrescar(); };
+  if ($('bEsc')) $('bEsc').onclick = () => { C.anchoMm = num($('eAncho').value); C.altoMm = num($('eAlto').value); C.escalaManual = !!C.anchoMm; if (!C.anchoMm) { C.escalaManual = false; escalaDesdeTipo(); } refrescar(); };
+  if ($('bRedetectar')) $('bRedetectar').onclick = () => {
+    const sel = [...$('lCapas').querySelectorAll('input:checked')].map(i => i.value);
+    if (!sel.length) { toast('Elegí al menos una capa', 'warn'); return; }
+    C.capasSel = sel; C.estado = 'detectando'; C.meta = leerMeta('n');
+    pintarNuevo();
+    procesarCarga();
+  };
+}
+
+function actualizarResultado(conRevision) {
+  const C = ST.carga;
+  if (!C || C.estado !== 'listo' || !$('nKpi')) return;
+  $('nKpi').innerHTML = detCocido(C.coc.m, C.p);
+  $('nAviso').innerHTML = avisoEscala();
+  if (conRevision) { $('nRevision').innerHTML = revisionHtml(); enlazarRevision(); }
+  montarVisor($('visor'), C.coc.geo, C.coc.m, C.geoV, C.met, tituloCarga());
+}
+
+function tituloCarga() {
+  const C = ST.carga;
+  const cod = $('nCodigo') ? $('nCodigo').value.trim() : '';
+  const ver = $('nVersion') ? $('nVersion').value.trim() : '';
+  return (cod || C.archivo.nombre) + (ver ? ' · ' + ver : '');
+}
+
+function pintarNuevo() {
+  const C = ST.carga;
+  if (ST.visor) { ST.visor.destruir(); ST.visor = null; }
+  if (!C) {
+    app().innerHTML = `<section class="vista">${bannerLocal()}<div class="hero"><div><div class="eyebrow">Nuevo plano</div><h1>¿Cómo sale el <span>ladrillo cocido</span>?</h1><p class="sub">Soltá el plano del molde y en segundos ves el ladrillo cocido en 3D, con sus medidas y su peso.</p></div></div><div class="card">${dropHtml('dropNuevo')}</div></section>`;
+    enlazarDrop('dropNuevo');
+    return;
+  }
+  const cab = `<div class="hero"><div><div class="eyebrow">Nuevo plano · ${esc(C.archivo.nombre)}</div><h1>Así sale el <span>ladrillo cocido</span></h1>`;
+  if (C.estado === 'leyendo' || C.estado === 'detectando') {
+    app().innerHTML = `<section class="vista">${cab}<p class="sub">Un momento…</p></div></div><div class="card">${procesando(C.estado === 'leyendo' ? 'Leyendo el plano…' : 'Buscando el marco y los dados del molde…')}</div></section>`;
+    return;
+  }
+  if (C.estado === 'error') {
+    app().innerHTML = `<section class="vista">${cab}</div></div><div class="alerta bad"><span class="e">⚠️</span><span>${esc(C.error)}</span></div><div class="card" style="margin-top:16px">${dropHtml('dropNuevo', true)}</div></section>`;
+    enlazarDrop('dropNuevo');
+    return;
+  }
+  const t = tiposCarga().find(x => x.id === C.tipoId) || {};
+  app().innerHTML = `<section class="vista">${bannerLocal()}${cab}<p class="sub">${esc(t.nombre || 'Tipo nuevo')} · ${C.met.nHuecos} huecos detectados en el plano</p></div>
+      <div class="acciones"><button class="btn" id="bOtro">📄 Otro plano</button></div></div>
+    <div id="nAviso">${avisoEscala()}</div>
+    <div class="grid g-21" style="margin-top:12px">
+      ${cardHtml('🧱 Ladrillo cocido en 3D', 'Arrastrá para girarlo · rueda para acercar', toolbarVisor() + '<div class="visor" id="visor"></div>')}
+      <div class="col">
+        ${cardHtml('📐 El producto final', '', `<div id="nKpi">${detCocido(C.coc.m, C.p)}</div>`)}
+
+      </div>
+    </div>
+        <div class="card" style="margin-top:16px"><div class="card-h"><div class="t"><h3>💾 Guardar en el catálogo</h3><span class="sub">${modoLocal() ? 'Modo local: queda en este navegador' : 'Se suben a Drive el plano, la animación 3D y una imagen, en la carpeta del tipo'}</span></div></div>
+          ${camposMeta(C.meta, 'n', true)}
+          <div class="acciones"><button class="btn pri brillo" id="bGuardar">💾 Guardar plano y animación</button></div></div>
+    <details class="card mas" style="margin-top:16px"><summary>🔍 Revisar la lectura del plano (huecos, escala, orientación y capas)</summary><div id="nRevision" style="margin-top:14px">${revisionHtml()}</div></details>
+  </section>`;
+  if ($('nTipo')) $('nTipo').value = C.tipoId;
+  enlazarToolbar();
+  enlazarRevision();
+  let tmr = null, armado = false;
+  enlazarMeta('n', null, () => {
+    if (!armado) return;
+    clearTimeout(tmr);
+    tmr = setTimeout(() => {
+      const nuevoTipo = $('nTipo').value;
+      C.meta = leerMeta('n');
+      const cambio = nuevoTipo !== C.tipoId;
+      C.tipoId = nuevoTipo;
+      if (cambio || nuevoTipo === '__nuevo') escalaDesdeTipo();
+      recalcularCarga();
+      actualizarResultado(cambio || nuevoTipo === '__nuevo');
+    }, 350);
+  });
+  armado = true;
+  $('bOtro').onclick = () => { ST.carga = null; pintarNuevo(); };
+  $('bGuardar').onclick = guardarNuevo;
+  montarVisor($('visor'), C.coc.geo, C.coc.m, C.geoV, C.met, tituloCarga());
+}
+
+async function blobBase64(b) { return aBase64(await b.arrayBuffer()); }
+
+async function grabarArchivos(base, avisar) {
+  const out = [];
+  if (!ST.visor) return out;
+  if (ST.visor.puedeGrabar()) {
+    try {
+      const v = await ST.visor.grabar(7, 960, 600, p => { if (avisar) avisar(p); });
+      out.push({ rol: 'animacion', nombre: base + '_cocido_3D.' + v.ext, mime: v.mime, base64: await blobBase64(v.blob) });
+    } catch (e) { toast('No se pudo grabar la animación: ' + e.message, 'warn'); }
+  }
+  const png = ST.visor.captura();
+  out.push({ rol: 'imagen', nombre: base + '_cocido_3D.png', mime: 'image/png', base64: png.split(',')[1] });
+  return out;
+}
+
+async function guardarNuevo() {
+  const C = ST.carga;
+  const btn = $('bGuardar');
+  const txt0 = btn.innerHTML;
+  const paso = t => { btn.innerHTML = t; };
+  btn.disabled = true;
+  loader(true);
+  try {
+    const meta = leerMeta('n');
+    if (!meta.codigo) throw new Error('Poné un nombre o código al molde');
+    const dimsMolde = { anchoMolde: +C.met.ancho.toFixed(2), altoMolde: +C.met.alto.toFixed(2) };
+    if (meta.tipoId === '__nuevo') {
+      const t = Object.assign(leerTipo('nNT'), {});
+      if (!t.nombre) throw new Error('Completá el nombre del tipo de ladrillo');
+      if (!num(t.anchoMolde)) Object.assign(t, dimsMolde);
+      paso('🏷️ Creando el tipo…');
+      meta.tipoId = (await API.enviar({ accion: 'guardarTipo', tipo: t })).id;
+    } else {
+      const t = tipoDe(meta.tipoId);
+      if (t && !num(t.anchoMolde)) await API.enviar({ accion: 'guardarTipo', tipo: Object.assign({ id: t.id, nombre: t.nombre }, dimsMolde) });
+    }
+    const geo = { marco: C.geoV.marco.map(([x, y]) => [+x.toFixed(3), +y.toFixed(3)]), huecos: C.geoV.huecos.map(h => h.map(([x, y]) => [+x.toFixed(3), +y.toFixed(3)])) };
+    const prep = prepararMolde(meta, geo);
+    prep.molde.archivo = C.archivo.nombre;
+    let archivos = [];
+    if (!modoLocal()) {
+      const base = nombreArchivo((meta.codigo || 'molde') + (meta.version ? '_' + meta.version : ''));
+      paso('🎬 Grabando la animación 3D…');
+      if (ST.visor) ST.visor.rotular(meta.codigo + (meta.version ? ' · ' + meta.version : ''));
+      archivos = await grabarArchivos(base, p => paso(`🎬 Grabando la animación 3D… ${p} %`));
+      if (C.archivo.size < 25e6) archivos.unshift({ rol: 'plano', nombre: C.archivo.nombre, mime: C.archivo.mime, base64: aBase64(C.buf) });
+      paso('☁️ Subiendo a Drive…');
+    }
+    const r = await API.enviar({ accion: 'guardarMolde', molde: prep.molde, geo: prep.geo, archivos });
+    ST.geo[r.id] = prep.geo;
+    toast(r.msg || 'Guardado', 'ok');
+    ST.carga = null;
+    await cargar(true);
+    location.hash = '#/molde/' + encodeURIComponent(r.id);
+  } catch (err) {
+    toast(err.message, 'bad');
+    btn.disabled = false;
+    btn.innerHTML = txt0;
+  } finally { loader(false); }
+}
+
+async function grabarAnimacion(m) {
+  const btn = $('btnAnim');
+  if (!ST.visor) { toast('Esperá a que cargue el 3D', 'warn'); return; }
+  btn.disabled = true;
+  loader(true);
+  try {
+    btn.innerHTML = '🎬 Grabando…';
+    const archivos = await grabarArchivos(nombreArchivo(etiquetaMolde(m)), p => { btn.innerHTML = `🎬 Grabando… ${p} %`; });
+    btn.innerHTML = '☁️ Subiendo…';
+    await API.enviar({ accion: 'guardarMolde', molde: { id: m.id, codigo: m.codigo, tipoId: m.tipoId }, archivos });
+    toast('Animación guardada en Drive', 'ok');
+    await cargar(true);
+  } catch (err) { toast(err.message, 'bad'); btn.disabled = false; btn.innerHTML = '🎬 Grabar animación y subir a Drive'; } finally { loader(false); }
+}
+
+async function vistaMolde(id) {
+  const m = moldeDe(id);
+  if (!m) { app().innerHTML = `<section class="vista"><div class="card"><div class="empty">No existe el molde ${esc(id)}. <a class="btn" href="#/catalogo">Volver</a></div></div></section>`; return; }
+  const t = tipoDe(m.tipoId) || {};
+  const e = estadoDe(m.estado);
+  const ch = cadena(ST.moldes, m.id);
+  const padre = m.padreId ? moldeDe(m.padreId) : null;
+  const tl = ch.arriba.concat([m], ch.abajo.map(x => x.m));
+  const archivos = [m.archivoUrl ? `<a class="btn" href="${esc(m.archivoUrl)}" target="_blank" rel="noopener">📄 Plano</a>` : '', m.animacionUrl ? `<a class="btn" href="${esc(m.animacionUrl)}" target="_blank" rel="noopener">🎬 Animación</a>` : '', m.imagenUrl ? `<a class="btn" href="${esc(m.imagenUrl)}" target="_blank" rel="noopener">🖼️ Imagen</a>` : ''].join('');
+  app().innerHTML = `<section class="vista">${bannerLocal()}
+    <div class="hero"><div><div class="eyebrow"><a href="#/catalogo">Moldes</a> · ${esc(t.nombre || 'Sin tipo')}</div>
+      <h1>${esc(m.codigo || m.id)} <span>${esc(m.version || '')}</span></h1>
+      <p class="sub"><span class="tag ${e.cls}">${e.e} ${esc(e.id)}</span> ${m.proveedor ? '· ' + esc(m.proveedor) : ''} ${m.fecha ? '· plano del ' + fFecha(m.fecha) : ''} ${m.autor ? '· ' + esc(m.autor) : ''}</p></div>
+      <div class="acciones">${padre ? `<a class="btn" href="#/comparar/${encodeURIComponent(padre.id)}/${encodeURIComponent(m.id)}">⚖️ Comparar con la versión anterior</a>` : ''}<button class="btn" id="btnEditar">✏️ Editar</button><button class="btn" id="btnBorrar" title="Eliminar">🗑️</button></div></div>
+    <div class="grid g-21">
+      ${cardHtml('🧱 Ladrillo cocido en 3D', 'Arrastrá para girarlo · rueda para acercar', toolbarVisor() + '<div class="visor" id="visor"><div class="procesando"><span class="spin"></span>Cargando…</div></div>')}
+      <div class="col">
+        ${cardHtml('📐 El producto final', '', '<div id="mKpi">' + procesando('Calculando…') + '</div>')}
+        ${cardHtml('☁️ Archivos', modoLocal() ? 'En modo local no se suben archivos' : (m.animacionUrl ? 'Guardados en Drive' : 'Todavía sin animación en Drive'), `<div class="acciones" style="margin-top:0">${archivos}${modoLocal() ? '' : `<button class="btn ${m.animacionUrl ? '' : 'pri'}" id="btnAnim">🎬 ${m.animacionUrl ? 'Volver a grabar animación' : 'Grabar animación y subir a Drive'}</button>`}<button class="btn" id="btnDxfC">📐 DXF cocido</button><button class="btn" id="btnDxfV">📐 DXF molde</button></div>`, ' style="margin-top:16px"')}
+        ${cardHtml('🔗 Versiones de este molde', '', `<div class="timeline">${tl.map(x => `<a href="#/molde/${encodeURIComponent(x.id)}" class="${x.id === m.id ? 'yo' : ''}"><span class="nodo"></span><span class="info"><b>${esc(etiquetaMolde(x))}</b><small>${estadoDe(x.estado).e} ${esc(x.estado || '')} · ${fmt(num(x.huecos))} huecos · ${fmt(num(x.vacio), 1)} %</small></span></a>`).join('')}</div>`, ' style="margin-top:16px"')}
+      </div>
+    </div>
+    <div id="detalle"></div>
+    ${m.notas ? cardHtml('📝 Notas', '', `<p style="white-space:pre-wrap">${esc(m.notas)}</p>`, ' style="margin-top:16px"') : ''}
+  </section>`;
+  enlazarToolbar();
+  $('btnEditar').onclick = () => editarMolde(m);
+  $('btnBorrar').onclick = () => borrarMolde(m);
+  if ($('btnAnim')) $('btnAnim').onclick = () => grabarAnimacion(m);
+  let geoV;
+  try { geoV = await geometriaDe(m.id); } catch (err) { $('mKpi').innerHTML = `<div class="empty">⚠️ ${esc(err.message)}</div>`; $('visor').innerHTML = ''; return; }
+  if (ST.vista !== 'molde' || ST.args[0] !== id) return;
+  const mv = Geo.metricas(geoV);
+  const C = cocidoDe(m, geoV);
+  const mc = C.m;
+  $('mKpi').innerHTML = detCocido(mc, C.p);
+  $('detalle').innerHTML = `<div class="grid g2" style="margin-top:16px">
+      ${cardHtml('📐 Sección del ladrillo cocido', 'Medidas en mm · línea azul: contorno del molde', svgSeccion(C.geo, mc, { verde: { geo: geoV, ancho: mv.ancho, alto: mv.alto } }) + '<div class="ley"><span><i style="background:var(--c-ladrillo)"></i>Ladrillo cocido</span><span><i style="background:var(--c-verde)"></i>Molde</span></div>')}
+      ${cardHtml('🕳️ Huecos', `${mv.nHuecos} huecos en ${mv.tipos.length} medidas`, tablaHuecos(mv, mc))}
+    </div>
+    <details class="card mas" style="margin-top:16px"><summary>📋 Todas las medidas del molde y del ladrillo cocido</summary><div style="margin-top:12px">${tablaMedidas(mv, mc, C.p)}</div></details>`;
+  montarVisor($('visor'), C.geo, mc, geoV, mv, etiquetaMolde(m));
+  const base = nombreArchivo(etiquetaMolde(m));
+  const notas = [`${t.nombre || ''} - ${etiquetaMolde(m)}`, `Contraccion H ${C.p.contrH}% V ${C.p.contrV}% - largo ${C.p.largo} mm - densidad ${C.p.densidad}`, `Seccion ${mc.ancho.toFixed(2)} x ${mc.alto.toFixed(2)} mm - huecos ${mc.nHuecos} - vacio ${mc.vacio.toFixed(2)}% - peso ${mc.peso.toFixed(2)} kg`];
+  $('btnDxfC').onclick = () => descargar(base + '_cocido.dxf', Geo.dxfR12(C.geo, 'LADRILLO COCIDO ' + notas[0], notas.slice(1)), 'application/dxf');
+  $('btnDxfV').onclick = () => descargar(base + '_molde.dxf', Geo.dxfR12(geoV, 'MOLDE ' + notas[0], [`Seccion ${mv.ancho.toFixed(2)} x ${mv.alto.toFixed(2)} mm - huecos ${mv.nHuecos} - vacio ${mv.vacio.toFixed(2)}%`]), 'application/dxf');
+}
+
+async function vistaAjustes() {
+  const c = conexion();
+  app().innerHTML = `<section class="vista">
+    <div class="hero"><div><div class="eyebrow">Configuración</div><h1>Ajustes y <span>tipos de ladrillo</span></h1><p class="sub">${modoLocal() ? 'Modo local: los datos quedan solo en este navegador.' : 'Conectado a la planilla por Apps Script.'}</p></div></div>
+    <div class="card"><div class="card-h"><div class="t"><h3>🏷️ Tipos de ladrillo</h3><span class="sub">Medida del molde (para escalar los PDF), contracción, largo cocido y densidad. Al cambiarlos se recalculan todos los moldes del tipo.</span></div><div class="acciones" style="margin:0"><button class="btn pri" id="bNuevoT">＋ Nuevo tipo</button></div></div>
+      <div id="nuevoT"></div>
+      ${ST.tipos.map((t, i) => `<details class="mas" style="border-top:1px solid var(--line);padding-top:10px"><summary>${esc(t.nombre)} · ${ST.moldes.filter(m => m.tipoId === t.id).length} molde(s) · ${fmt(num(t.anchoMolde), 1)} × ${fmt(num(t.altoMolde), 1)} mm · 🔥 ${fmt(num(t.contrH), 1)} / ${fmt(num(t.contrV), 1)} %</summary><div style="margin-top:10px">${camposTipo(t, 't' + i)}<div class="acciones"><button class="btn" data-borrar="${esc(t.id)}">🗑️ Borrar</button><button class="btn pri" data-guardar="${i}">💾 Guardar</button></div></div></details>`).join('') || '<div class="empty">Todavía no hay tipos. Se crean solos al guardar el primer plano.</div>'}
+    </div>
+    ${cardHtml('🔌 Conexión', 'URL /exec de Apps Script y clave (se guardan en este navegador)', `<div id="infoLinks"></div><form class="form" id="formCx" autocomplete="off"><label class="f w2">URL /exec<input id="cUrl" type="url" value="${esc(c.url || '')}" placeholder="https://script.google.com/macros/s/.../exec"></label><label class="f">Clave<input id="cKey" type="password" value="${esc(c.key || '')}" placeholder="Opcional"></label><label class="f">👤 Tu nombre<input id="cUsu" maxlength="60" value="${esc(c.usuario || '')}"></label>
+      <div class="full acciones" style="margin-top:0"><button class="btn" type="button" id="bLocal">💾 Modo local</button><button class="btn pri" type="submit">🔌 Guardar y probar</button></div></form>`, ' style="margin-top:16px"')}
+    ${cardHtml('🧪 Ejemplos y respaldo', '', `<div class="acciones" style="margin-top:0"><button class="btn" id="bSeed2">📥 Cargar los 4 moldes de ejemplo (portante 12×19×33)</button><button class="btn" id="bBackup">⬇️ Descargar respaldo</button><button class="btn" id="bCache">🧹 Borrar caché local</button></div>`, ' style="margin-top:16px"')}
+  </section>`;
+  $('bNuevoT').onclick = () => {
+    $('nuevoT').innerHTML = `<div style="margin:10px 0 16px">${camposTipo(ST.tipos.length ? {} : PRESET_TIPO, 'tn')}<div class="acciones"><button class="btn pri" id="bGuardarTN">💾 Crear tipo</button></div></div>`;
+    $('bGuardarTN').onclick = () => guardarTipoUI(leerTipo('tn'));
+  };
+  app().querySelectorAll('[data-guardar]').forEach(b => { b.onclick = () => { const i = +b.dataset.guardar; guardarTipoUI(Object.assign({ id: ST.tipos[i].id }, leerTipo('t' + i))); }; });
+  app().querySelectorAll('[data-borrar]').forEach(b => {
+    b.onclick = async () => {
+      if (!await confirmar('¿Borrar el tipo ' + (tipoDe(b.dataset.borrar) || {}).nombre + '?')) return;
+      loader(true);
+      try { toast((await API.enviar({ accion: 'borrarTipo', id: b.dataset.borrar })).msg, 'ok'); await cargar(true); } catch (err) { toast(err.message, 'bad'); } finally { loader(false); }
+    };
+  });
+  $('formCx').onsubmit = async e => {
+    e.preventDefault();
+    LS.set('mt_url', $('cUrl').value.trim()); LS.set('mt_key', $('cKey').value.trim()); LS.set('mt_usuario', $('cUsu').value.trim());
+    ST.geo = {};
+    await cargar(true);
+    if (ST.cargado) toast(modoLocal() ? 'Modo local' : 'Conexión correcta', 'ok');
+  };
+  $('cUsu').onchange = e => LS.set('mt_usuario', e.target.value.trim());
+  $('bLocal').onclick = async () => { LS.set('mt_url', ''); LS.set('mt_key', ''); ST.geo = {}; await cargar(true); toast('Modo local activado', 'ok'); };
+  $('bSeed2').onclick = importarSeed;
+  $('bBackup').onclick = respaldo;
+  $('bCache').onclick = () => { Object.keys(localStorage).filter(k => k.startsWith('mt_geo_')).forEach(k => LS.del(k)); ST.geo = {}; toast('Caché borrada', 'ok'); };
+  if (!modoLocal()) {
+    try {
+      const i = await API.info();
+      if (i && $('infoLinks')) $('infoLinks').innerHTML = `<div class="acciones" style="margin:0 0 12px"><a class="btn" href="${esc(i.planillaUrl)}" target="_blank" rel="noopener">📊 Abrir la planilla</a><a class="btn" href="${esc(i.carpetaUrl)}" target="_blank" rel="noopener">📁 Abrir la carpeta de planos</a></div>`;
+    } catch (e) {}
+  }
+}
+
+function leerRuta() {
+  const h = location.hash.replace(/^#\/?/, '').split('?')[0];
+  const partes = h.split('/').filter(Boolean).map(decodeURIComponent);
+  let v = partes[0] || 'catalogo';
+  if (v === 'cargar') v = 'nuevo';
+  if (v === 'tipos') v = 'ajustes';
+  return { v: ['catalogo', 'molde', 'nuevo', 'comparar', 'ajustes'].includes(v) ? v : 'catalogo', args: partes.slice(1) };
+}
+
+function render() {
+  const r = leerRuta();
+  ST.vista = r.v; ST.args = r.args;
+  pintarNav();
+  if (ST.visor) { ST.visor.destruir(); ST.visor = null; }
+  if (!ST.cargado && ST.vista !== 'ajustes' && ST.vista !== 'nuevo') { app().innerHTML = `<section class="vista"><div class="card">${procesando('Cargando moldes…')}</div></section>`; return; }
+  if (ST.vista === 'catalogo') vistaCatalogo();
+  else if (ST.vista === 'molde') vistaMolde(ST.args[0]);
+  else if (ST.vista === 'nuevo') pintarNuevo();
+  else if (ST.vista === 'comparar') vistaComparar(ST.args[0], ST.args[1]);
+  else vistaAjustes();
 }
 
 document.addEventListener('DOMContentLoaded', init);

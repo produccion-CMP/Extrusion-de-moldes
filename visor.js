@@ -21,6 +21,9 @@ function montar(host, D) {
   const cam = new THREE.PerspectiveCamera(30, 1, 1, 10000);
   const ctl = new OrbitControls(cam, renderer.domElement);
   ctl.enableDamping = true;
+  let auto = D.autoGiro !== false;
+  const velocidad = (2 * Math.PI) / 14;
+  ctl.addEventListener('start', () => { auto = false; });
   scene.add(new THREE.HemisphereLight(0xfff6ea, 0x8a7a6a, 1.15));
   const sun = new THREE.DirectionalLight(0xffffff, 2.1);
   sun.position.set(380, 560, 300);
@@ -46,6 +49,8 @@ function montar(host, D) {
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(0.03, 0.03); return t;
   })();
   const mat = new THREE.MeshStandardMaterial({ color: D.color || 0xc0603a, roughness: 0.88, metalness: 0, bumpMap: tex, bumpScale: 0.35 });
+  const giro = new THREE.Group();
+  scene.add(giro);
   const brick = new THREE.Group();
   const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true; mesh.receiveShadow = true; brick.add(mesh);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 28), new THREE.LineBasicMaterial({ color: 0x5a2a17, transparent: true, opacity: 0.5 }));
@@ -87,7 +92,7 @@ function montar(host, D) {
   cota([W / 2, -H / 2, L / 2], [W / 2, H / 2, L / 2], [22, 0, 0], f1(H));
   cota([W / 2, -H / 2, L / 2], [W / 2, -H / 2, -L / 2], [22, -22, 0], f1(L));
   brick.add(dims);
-  scene.add(brick);
+  giro.add(brick);
 
   let pose = 'obra', vista = 'iso';
   function aplicarPose() {
@@ -114,13 +119,140 @@ function montar(host, D) {
     cam.aspect = r.width / r.height; cam.updateProjectionMatrix();
   }
   const ro = new ResizeObserver(size); ro.observe(host); size();
-  let vivo = true;
-  (function loop() { if (!vivo) return; requestAnimationFrame(loop); ctl.update(); renderer.render(scene, cam); lr.render(scene, cam); })();
+  let vivo = true, grabando = null, tPrev = performance.now();
+  (function loop() {
+    if (!vivo) return;
+    requestAnimationFrame(loop);
+    const t = performance.now(), dt = Math.min(0.1, (t - tPrev) / 1000);
+    tPrev = t;
+    if (grabando && grabando.manual) return;
+    if (grabando) giro.rotation.y = grabando.a0 + 2 * Math.PI * Math.min(1, (t - grabando.t0) / grabando.ms);
+    else if (auto) giro.rotation.y += velocidad * dt;
+    ctl.update();
+    renderer.render(scene, cam);
+    if (!grabando) lr.render(scene, cam);
+  })();
+  function tipoVideo() {
+    const ops = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+    return window.MediaRecorder ? ops.find(t => MediaRecorder.isTypeSupported(t)) || null : null;
+  }
+  function grabarMR(seg, ancho, alto) {
+    return new Promise((res, rej) => {
+      const mime = tipoVideo();
+      const cv = renderer.domElement;
+      if (!mime || !cv.captureStream) { rej(new Error('Este navegador no puede grabar video')); return; }
+      const r0 = host.getBoundingClientRect();
+      const W0 = ancho || 960, H0 = alto || 600;
+      renderer.setPixelRatio(1);
+      renderer.setSize(W0, H0, false);
+      cam.aspect = W0 / H0; cam.updateProjectionMatrix();
+      lr.domElement.style.visibility = 'hidden';
+      const pose0 = pose, vista0 = vista;
+      pose = 'obra'; vista = 'iso'; aplicarPose(); ponerCam();
+      const st = cv.captureStream(30);
+      const rec = new MediaRecorder(st, { mimeType: mime, videoBitsPerSecond: 4e6 });
+      const trozos = [];
+      rec.ondataavailable = e => { if (e.data && e.data.size) trozos.push(e.data); };
+      rec.onstop = () => {
+        grabando = null;
+        lr.domElement.style.visibility = '';
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        pose = pose0; vista = vista0; aplicarPose(); ponerCam();
+        renderer.setSize(r0.width, r0.height);
+        cam.aspect = r0.width / r0.height; cam.updateProjectionMatrix();
+        res({ blob: new Blob(trozos, { type: mime.split(';')[0] }), mime: mime.split(';')[0], ext: mime.includes('mp4') ? 'mp4' : 'webm' });
+      };
+      dims.visible = false;
+      grabando = { t0: performance.now(), ms: (seg || 6) * 1000, a0: 0 };
+      giro.rotation.y = 0;
+      rec.start(200);
+      setTimeout(() => { rec.stop(); dims.visible = true; }, (seg || 6) * 1000 + 150);
+    });
+  }
+  function cargarMuxer() {
+    if (window.WebMMuxer) return Promise.resolve();
+    return new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/webm-muxer@5.0.3/build/webm-muxer.js';
+      sc.onload = res; sc.onerror = () => rej(new Error('No se pudo cargar el grabador de video'));
+      document.head.appendChild(sc);
+    });
+  }
+  async function grabarWC(seg, ancho, alto, onProg) {
+    await cargarMuxer();
+    const W0 = ancho || 960, H0 = alto || 600, fps = 30, n = Math.round((seg || 6) * fps);
+    let codec = 'vp09.00.10.08', mk = 'V_VP9';
+    const cfg = c => ({ codec: c, width: W0, height: H0, bitrate: 5e6, framerate: fps });
+    if (!(await VideoEncoder.isConfigSupported(cfg(codec))).supported) { codec = 'vp8'; mk = 'V_VP8'; }
+    if (!(await VideoEncoder.isConfigSupported(cfg(codec))).supported) throw new Error('sin codec');
+    const muxer = new WebMMuxer.Muxer({ target: new WebMMuxer.ArrayBufferTarget(), video: { codec: mk, width: W0, height: H0, frameRate: fps } });
+    let fallo = null;
+    const enc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => { fallo = e; } });
+    enc.configure(cfg(codec));
+    const r0 = host.getBoundingClientRect();
+    const pose0 = pose, vista0 = vista;
+    grabando = { manual: true };
+    renderer.setPixelRatio(1);
+    renderer.setSize(W0, H0, false);
+    cam.aspect = W0 / H0; cam.updateProjectionMatrix();
+    lr.domElement.style.visibility = 'hidden';
+    dims.visible = false;
+    pose = 'obra'; vista = 'iso'; aplicarPose(); ponerCam();
+    const fondo = scene.background;
+    scene.background = new THREE.Color(0xf4f0ea);
+    const lienzo = document.createElement('canvas');
+    lienzo.width = W0; lienzo.height = H0;
+    const g2 = lienzo.getContext('2d');
+    const rotulo = () => {
+      g2.drawImage(renderer.domElement, 0, 0, W0, H0);
+      if (!D.titulo) return;
+      g2.fillStyle = 'rgba(255,255,255,.88)';
+      g2.fillRect(0, H0 - 74, W0, 74);
+      g2.fillStyle = '#c0603a'; g2.fillRect(0, H0 - 74, 6, 74);
+      g2.fillStyle = '#24211d'; g2.font = '700 24px "Plus Jakarta Sans", Arial, sans-serif'; g2.fillText(D.titulo, 22, H0 - 42);
+      g2.fillStyle = '#6f6860'; g2.font = '500 17px "Plus Jakarta Sans", Arial, sans-serif'; g2.fillText(D.subtitulo || '', 22, H0 - 16);
+    };
+    try {
+      for (let i = 0; i < n; i++) {
+        if (fallo) throw fallo;
+        giro.rotation.y = 2 * Math.PI * i / n;
+        renderer.render(scene, cam);
+        rotulo();
+        const fr = new VideoFrame(lienzo, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
+        enc.encode(fr, { keyFrame: i % 60 === 0 });
+        fr.close();
+        while (enc.encodeQueueSize > 4) await new Promise(r => setTimeout(r, 5));
+        if (i % 10 === 0) { if (onProg) onProg(Math.round(100 * i / n)); await new Promise(r => setTimeout(r, 0)); }
+      }
+      await enc.flush();
+      muxer.finalize();
+    } finally {
+      scene.background = fondo;
+      grabando = null;
+      dims.visible = true;
+      lr.domElement.style.visibility = '';
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      pose = pose0; vista = vista0; aplicarPose(); ponerCam();
+      renderer.setSize(r0.width, r0.height);
+      cam.aspect = r0.width / r0.height; cam.updateProjectionMatrix();
+    }
+    return { blob: new Blob([muxer.target.buffer], { type: 'video/webm' }), mime: 'video/webm', ext: 'webm' };
+  }
+  async function grabar(seg, ancho, alto, onProg) {
+    if (window.VideoEncoder && window.VideoFrame) {
+      try { return await grabarWC(seg, ancho, alto, onProg); } catch (e) { if (!tipoVideo()) throw e; }
+    }
+    return grabarMR(seg, ancho, alto);
+  }
   return {
     pose(p) { pose = p; aplicarPose(); ponerCam(); },
     vista(v) { vista = v; ponerCam(); },
     mostrar(k, on) { if (k === 'cotas') dims.visible = on; if (k === 'aristas') edges.visible = on; if (k === 'verde' && verde) verde.visible = on; },
     captura() { renderer.render(scene, cam); return renderer.domElement.toDataURL('image/png'); },
+    grabar,
+    puedeGrabar: () => !!window.VideoEncoder || !!tipoVideo(),
+    girar(on) { auto = !!on; },
+    rotular(t, st) { if (t) D.titulo = t; if (st) D.subtitulo = st; },
     destruir() {
       vivo = false; ro.disconnect();
       geo.dispose(); mat.dispose(); tex.dispose(); renderer.dispose();

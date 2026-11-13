@@ -89,7 +89,10 @@ const Local = {
       r = { msg: 'Tipo eliminado' };
     } else if (p.accion === 'guardarMolde') {
       const mo = Object.assign({}, p.molde);
-      if (p.archivoDatos) mo.archivo = p.archivoDatos.nombre;
+      const pl = (p.archivos || []).find(a => a.rol === 'plano');
+      if (pl) mo.archivo = pl.nombre;
+      const i0 = d.moldes.findIndex(x => x.id === mo.id);
+      if (i0 >= 0 && !mo.tipoId) mo.tipoId = d.moldes[i0].tipoId;
       r = this.guardarMolde(d, mo, p.geo);
     } else if (p.accion === 'borrarMolde') {
       const este = d.moldes.find(m => m.id === p.id);
@@ -113,6 +116,7 @@ const Local = {
 };
 
 const API = {
+  async info() { return modoLocal() ? null : remotoGet({ accion: 'info' }); },
   async catalogo() { return modoLocal() ? Local.catalogo() : remotoGet({ accion: 'catalogo' }); },
   async geometria(id) {
     const cache = LS.get('mt_geo_' + id, null);
