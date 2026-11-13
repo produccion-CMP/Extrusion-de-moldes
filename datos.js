@@ -8,6 +8,20 @@ const LS = {
   del(k) { try { localStorage.removeItem(k); } catch (e) {} }
 };
 
+const CONFIG_DEFECTO = {
+  familias: [
+    { id: 'huecos', nombre: 'Huecos', icono: '🧱', descripcion: 'Ladrillos huecos de cerramiento' },
+    { id: 'portantes', nombre: 'Portantes', icono: '🏗️', descripcion: 'Ladrillos portantes para muros de carga' },
+    { id: 'losas', nombre: 'Losas', icono: '🏠', descripcion: 'Bloques cerámicos para losas' },
+    { id: 'climablock', nombre: 'Climablock', icono: '❄️', descripcion: 'Bloques de alta aislación térmica' }
+  ],
+  umbrales: { paredMin: 6.0, tabiqueMin: 5.5, huecoMin: 10, radioMin: 1.5, tolSimetria: 0.3, tolUniforme: 0.25, tolBalance: 0.3, tolMedida: 2.0, tolEscala: 0.5 },
+  soloAdminCarga: false
+};
+
+const sesionAdmin = () => { const a = LS.get('mt_admin', null); return a && a.exp > Date.now() ? a : null; };
+const esAdmin = () => modoLocal() || !!sesionAdmin();
+
 const conexion = () => ({ url: LS.get('mt_url', '') || CONF.SCRIPT_URL, key: LS.get('mt_key', '') || CONF.API_KEY, usuario: LS.get('mt_usuario', '') });
 const modoLocal = () => !conexion().url;
 
@@ -43,7 +57,8 @@ async function remotoGet(params) {
 
 async function remotoPost(payload) {
   const { url, key, usuario } = conexion();
-  const r = await fetch(url, { method: 'POST', body: JSON.stringify(Object.assign({ key, usuario }, payload)) });
+  const a = sesionAdmin();
+  const r = await fetch(url, { method: 'POST', body: JSON.stringify(Object.assign({ key, usuario, token: a ? a.token : '' }, payload)) });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'No se pudo guardar');
   return j.data;
@@ -57,7 +72,7 @@ const Local = {
     lista.forEach(x => { const m = String(x.id).match(new RegExp('^' + pref + '-(\\d+)$')); if (m) max = Math.max(max, +m[1]); });
     return pref + '-' + String(max + 1).padStart(ancho, '0');
   },
-  catalogo() { const d = this.leer(); return { tipos: d.tipos, moldes: d.moldes, servidor: new Date().toISOString() }; },
+  catalogo() { const d = this.leer(); return { tipos: d.tipos, moldes: d.moldes, config: Object.assign(JSON.parse(JSON.stringify(CONFIG_DEFECTO)), d.config || {}), adminConfigurado: true, servidor: new Date().toISOString() }; },
   geometria(id) { const d = this.leer(); if (!d.geos[id]) throw new Error('No hay geometría guardada para ' + id); return { id, geo: d.geos[id] }; },
   guardarTipo(d, t) {
     if (!t.nombre) throw new Error('El tipo necesita un nombre');
@@ -81,7 +96,9 @@ const Local = {
   enviar(p) {
     const d = this.leer();
     let r;
-    if (p.accion === 'guardarTipo') r = this.guardarTipo(d, p.tipo || {});
+    if (p.accion === 'login') return { token: 'local', exp: Date.now() + 864e5, msg: 'Modo local' };
+    if (p.accion === 'guardarConfig') { d.config = Object.assign(d.config || {}, p.config || {}); r = { config: d.config, msg: 'Configuración guardada' }; }
+    else if (p.accion === 'guardarTipo') r = this.guardarTipo(d, p.tipo || {});
     else if (p.accion === 'borrarTipo') {
       const n = d.moldes.filter(m => m.tipoId === p.id).length;
       if (n) throw new Error('No se puede borrar: hay ' + n + ' molde(s) de este tipo');
@@ -116,6 +133,12 @@ const Local = {
 };
 
 const API = {
+  async login(clave) {
+    const r = modoLocal() ? Local.enviar({ accion: 'login' }) : await remotoPost({ accion: 'login', clave });
+    LS.set('mt_admin', { token: r.token, exp: r.exp });
+    return r;
+  },
+  salir() { LS.del('mt_admin'); },
   async info() { return modoLocal() ? null : remotoGet({ accion: 'info' }); },
   async catalogo() { return modoLocal() ? Local.catalogo() : remotoGet({ accion: 'catalogo' }); },
   async geometria(id) {

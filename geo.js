@@ -587,11 +587,13 @@ const Geo = (() => {
     const keys = o.capas && o.capas.length ? o.capas : detectarCapas(lect);
     const sel0 = lect.capas.filter(c => keys.includes(c.key));
     if (!sel0.length) throw new Error('No hay trazos en las capas elegidas');
-    const sel = conPuentes(sel0);
+    const brs = puentes(sel0);
+    const sel = sel0.concat(brs);
     const bbAll = bboxCapas(sel);
     const R0 = rasterizar(sel, bbAll, 1600, 0.0012, 3e6);
     const E0 = etiquetar(R0);
     const ob = elegirObjeto(E0.regiones);
+    const segs = brs.length && ob ? necesarios(sel0, brs[0].polys, bbAll, R0, E0, ob.r.id, lect.capas.filter(c => !keys.includes(c.key))) : [];
     if (!ob) throw new Error('No se encontró un contorno cerrado con dados adentro. Probá con otras capas.');
     const a0 = R0.aMundo(ob.r.x0 - 3, ob.r.y1 + 3), a1 = R0.aMundo(ob.r.x1 + 3, ob.r.y0 - 3);
     const mg = 0.01 * Math.max(a1[0] - a0[0], a1[1] - a0[1]);
@@ -604,7 +606,47 @@ const Geo = (() => {
       if (!best || res.huecos.length > best.huecos.length) best = res;
     }
     if (!best) throw new Error('No se pudo aislar el molde en alta resolución');
-    return normalizar(best.marco, best.huecos, lect, { rot: o.rot, espejo: o.espejo, resol: best.resol, capas: keys });
+    return normalizar(best.marco, best.huecos, lect, { rot: o.rot, espejo: o.espejo, resol: best.resol, capas: keys, puentes: segs });
+  }
+
+  function necesarios(sel0, polys, bb, R0, E0, idMat, otras) {
+    const R1 = rasterizar(sel0, bb, 1600, 0.0012, 3e6);
+    const { W, H, esc, pad } = R0;
+    const px = (x, y) => [(x - bb.x0) * esc + pad, (bb.y1 - y) * esc + pad];
+    const lado = (cx, cy, nx, ny) => {
+      for (let t = 1; t <= 12; t++) {
+        const x = Math.round(cx + nx * t), y = Math.round(cy + ny * t);
+        if (x < 0 || y < 0 || x >= W || y >= H) return 0;
+        const i = y * W + x;
+        if (!R0.m[i]) return E0.lab[i];
+      }
+      return 0;
+    };
+    const hueco = (ax, ay, bx, by) => {
+      const n = Math.max(2, Math.ceil(Math.hypot(bx - ax, by - ay) * 2));
+      for (let k = 0; k <= n; k++) {
+        const x = Math.round(ax + (bx - ax) * k / n), y = Math.round(ay + (by - ay) * k / n);
+        if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2) continue;
+        let lleno = false;
+        for (let dy = -2; dy <= 2 && !lleno; dy++) for (let dx = -2; dx <= 2; dx++) if (R1.m[(y + dy) * W + x + dx]) { lleno = true; break; }
+        if (!lleno) return true;
+      }
+      return false;
+    };
+    const out = [];
+    for (const q of polys) {
+      const [ax, ay] = px(q.p[0], q.p[1]), [bx, by] = px(q.p[2], q.p[3]);
+      if (!hueco(ax, ay, bx, by)) continue;
+      const L = Math.hypot(bx - ax, by - ay) || 1;
+      const nx = -(by - ay) / L, ny = (bx - ax) / L, cx = (ax + bx) / 2, cy = (ay + by) / 2;
+      const a0 = lado(cx, cy, nx, ny), b0 = lado(cx, cy, -nx, -ny);
+      if (!(a0 && b0 && a0 !== b0 && (a0 === idMat || b0 === idMat))) continue;
+      const mx = (q.p[0] + q.p[2]) / 2, my = (q.p[1] + q.p[3]) / 2, r = Math.hypot(q.p[2] - q.p[0], q.p[3] - q.p[1]) * 0.3 + 1e-3 * Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0);
+      let otra = null;
+      for (const c of otras || []) { if (otra) break; for (const s of c.polys) { const p = s.p; for (let k = 2; k < p.length; k += 2) if (dSegPt(mx, my, p[k - 2], p[k - 1], p[k], p[k + 1]) < r) { otra = c.key; break; } if (otra) break; } }
+      out.push(otra ? [[q.p[0], q.p[1]], [q.p[2], q.p[3]], otra] : [[q.p[0], q.p[1]], [q.p[2], q.p[3]]]);
+    }
+    return out;
   }
 
   function fino(sel, bb, maxLado, ancho, maxPix) {
@@ -660,13 +702,13 @@ const Geo = (() => {
   }
 
   function normalizar(marco, huecos, lect, o) {
-    let F = marco, Hs = huecos;
+    let F = marco, Hs = huecos, Bs = o.puentes || [];
     let b = bbox(F);
     let rotAuto = 0;
     if (b.h > b.w) {
       rotAuto = 90;
       const r = (x, y) => [y, -x];
-      F = transformar(F, r); Hs = Hs.map(h => transformar(h, r)); b = bbox(F);
+      F = transformar(F, r); Hs = Hs.map(h => transformar(h, r)); Bs = Bs.map(h => tB(h, r)); b = bbox(F);
     }
     const s = 0.08 * Math.min(b.w, b.h);
     const lleno = (x0, y0) => clipCaja(F, x0, y0, x0 + s, y0 + s) / (s * s);
@@ -678,15 +720,15 @@ const Geo = (() => {
       const f = g === 90 ? (x, y) => [-y, x] : g === 180 ? (x, y) => [-x, -y] : (x, y) => [y, -x];
       return transformar(pts, f);
     };
-    F = rotar(F, giro); Hs = Hs.map(h => rotar(h, giro));
-    if (o.espejo) { F = transformar(F, (x, y) => [-x, y]); Hs = Hs.map(h => transformar(h, (x, y) => [-x, y])); }
+    F = rotar(F, giro); Hs = Hs.map(h => rotar(h, giro)); Bs = Bs.map(h => rotar(h, giro));
+    if (o.espejo) { const m = (x, y) => [-x, y]; F = transformar(F, m); Hs = Hs.map(h => transformar(h, m)); Bs = Bs.map(h => tB(h, m)); }
     b = bbox(F);
     const tr = (x, y) => [x - b.x0, y - b.y0];
-    F = transformar(F, tr); Hs = Hs.map(h => transformar(h, tr));
+    F = transformar(F, tr); Hs = Hs.map(h => transformar(h, tr)); Bs = Bs.map(h => tB(h, tr));
     if (areaF(F) < 0) F.reverse();
     Hs = Hs.map(h => (areaF(h) > 0 ? h.slice().reverse() : h));
     Hs.sort((p, q) => { const a = bbox(p), c = bbox(q); return (Math.round(c.y0) - Math.round(a.y0)) || (a.x0 - c.x0); });
-    return { marco: F, huecos: Hs, ancho: b.w, alto: b.h, unidad: lect.unidad, mmPorUnidad: lect.mmPorUnidad, resol: o.resol, capas: o.capas, rotAuto, giro };
+    return { marco: F, huecos: Hs, puentes: Bs, ancho: b.w, alto: b.h, unidad: lect.unidad, mmPorUnidad: lect.mmPorUnidad, resol: o.resol, capas: o.capas, rotAuto, giro };
   }
 
   function escalarMm(ext, anchoMm, altoMm) {
@@ -697,13 +739,16 @@ const Geo = (() => {
     const f = (x, y) => [+(x * k).toFixed(3), +(y * k).toFixed(3)];
     const geo = { marco: transformar(ext.marco, f), huecos: ext.huecos.map(h => transformar(h, f)) };
     const ancho = ext.ancho * k, alto = ext.alto * k;
-    return { geo, k, ancho, alto, desvioAlto: altoMm ? (alto - altoMm) / altoMm : 0, resolMm: ext.resol * k };
+    const puentesMm = (ext.puentes || []).map(h => tB(h, f));
+    return { geo, k, ancho, alto, puentes: puentesMm, desvioAlto: altoMm ? (alto - altoMm) / altoMm : 0, resolMm: ext.resol * k };
   }
 
   function simplificar(geo, tol) {
     const s = p => { const q = dp(p, tol); return q.map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]); };
     return { marco: s(geo.marco), huecos: geo.huecos.map(s) };
   }
+
+  function tB(h, f) { const r = transformar(h.slice(0, 2), f); if (h[2]) r.push(h[2]); return r; }
 
   function dSegPt(px, py, ax, ay, bx, by) {
     const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
@@ -873,15 +918,15 @@ const Geo = (() => {
   function reorientar(ext, giro, espejo) {
     const f = giro === 90 ? (x, y) => [-y, x] : giro === 180 ? (x, y) => [-x, -y] : giro === 270 ? (x, y) => [y, -x] : (x, y) => [x, y];
     const g = (x, y) => { const p = f(x, y); return espejo ? [-p[0], p[1]] : p; };
-    let F = transformar(ext.marco, g), Hs = ext.huecos.map(h => transformar(h, g));
+    let F = transformar(ext.marco, g), Hs = ext.huecos.map(h => transformar(h, g)), Bs = (ext.puentes || []).map(h => tB(h, g));
     const b = bbox(F);
     const t = (x, y) => [x - b.x0, y - b.y0];
-    F = transformar(F, t); Hs = Hs.map(h => transformar(h, t));
+    F = transformar(F, t); Hs = Hs.map(h => transformar(h, t)); Bs = Bs.map(h => tB(h, t));
     if (areaF(F) < 0) F.reverse();
     Hs = Hs.map(h => (areaF(h) > 0 ? h.slice().reverse() : h));
     Hs.sort((p, q) => { const a = bbox(p), c = bbox(q); return (Math.round(c.y0) - Math.round(a.y0)) || (a.x0 - c.x0); });
-    return Object.assign({}, ext, { marco: F, huecos: Hs, ancho: b.w, alto: b.h });
+    return Object.assign({}, ext, { marco: F, huecos: Hs, puentes: Bs, ancho: b.w, alto: b.h });
   }
 
-  return { reorientar, leerPdf, leerDxf, extraer, detectarCapas, escalarMm, simplificar, metricas, cocer, dxfR12, svgPath, bbox, area, dp };
+  return { dPolis, dSegPt, reorientar, leerPdf, leerDxf, extraer, detectarCapas, escalarMm, simplificar, metricas, cocer, dxfR12, svgPath, bbox, area, dp };
 })();

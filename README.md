@@ -1,54 +1,79 @@
 # Extrusión de moldes – Planta Cevil
 
-Del plano del molde de extrusión (PDF o DXF de AutoCAD) al **ladrillo cocido en 3D**. Cada plano se guarda con la animación del ladrillo cocido, agrupado por tipo de ladrillo.
+Del plano del molde de extrusión (PDF o DXF de AutoCAD) al **ladrillo cocido en 3D**, con **revisión técnica del plano**, **plano con vistas** y **catálogo por familias**. Cada plano se guarda en Drive junto con la animación del ladrillo cocido, agrupado por tipo de ladrillo.
 
-## Cómo se usa
+## Navegación
 
-1. **Soltá el plano** en la pantalla principal (PDF exportado de AutoCAD o DXF).
-2. En segundos aparece **el ladrillo cocido en 3D girando**, con las medidas finales, la cantidad de huecos, el % de huecos, el peso, la pared mínima y el tabique mínimo.
-3. Elegí el **tipo de ladrillo**, poné el **código y la versión**, y opcionalmente la versión anterior del molde. Después tocá **Guardar plano y animación**.
-4. La app graba un video del ladrillo girando y sube a Drive, en la subcarpeta del tipo:
-   - el plano original;
-   - la animación (`.webm`);
-   - una imagen (`.png`).
+| Pantalla | Qué muestra |
+|---|---|
+| **Catálogo** | Familias: Huecos, Portantes, Losas, Climablock (editables por el admin) |
+| **Familia** | Tipos de la familia (H8, H12, H18, P12, P18…) con cantidad de variantes |
+| **Tipo** | Variantes del molde con **vista previa del plano**, huecos, % de vacío, peso y estado de la revisión |
+| **Variante** | Pestañas: 3D · Plano y vistas · Revisión · Medidas · Versiones |
+| **Nuevo plano** | Soltar el PDF o DXF → 3D cocido + revisión + plano → guardar con animación |
+| **Comparar** | Dos variantes lado a lado |
+| **Ajustes** | Acceso de administrador, familias, tipos, reglas de revisión, conexión |
 
-   La ficha queda guardada en la planilla.
+## Revisión del plano
 
-En **Moldes** se ven todos los guardados, agrupados por tipo y con las versiones enlazadas (→ versión siguiente, ⑂ rama). Cada ficha tiene:
-- el 3D;
-- la sección cocida acotada y los huecos por medida;
-- todas las medidas;
-- los enlaces a Drive;
-- la descarga de los DXF del cocido y del molde;
-- la comparación con la versión anterior.
+Se hace al cargar el plano y se guarda con cada variante. Cada observación tiene un número, que también aparece **marcado en el plano**, y una sugerencia de corrección.
 
-### Escala de los PDF
-En los PDF de AutoCAD las cotas vienen dibujadas como líneas y no como texto, así que el PDF no dice cuánto mide el molde. La app toma la medida exterior del molde (ancho × alto) que tiene guardada el **tipo de ladrillo**. Por ejemplo, el portante 12×19×33 tiene un molde de 344 × 125 mm. Si el plano no tiene esas proporciones, la app avisa. Los DXF ya vienen en milímetros.
+| Control | Nivel |
+|---|---|
+| Contorno abierto (líneas que no cierran) | Error si la abertura es > 0,5 mm |
+| Tramo del contorno en otra capa o color | Aviso |
+| Proporción del plano distinta a la medida del molde del tipo | Aviso |
+| Pared exterior y tabiques bajo el mínimo | Error |
+| Pared más fina que el tabique; tabiques o paredes desparejos | Aviso |
+| Simetría izquierda/derecha de los huecos | Aviso |
+| Huecos chicos; esquinas de dado vivas (radio estimado) | Aviso |
+| Ancho y alto cocido contra el objetivo del tipo | Aviso |
+| % de vacío fuera de rango; peso por encima del máximo | Aviso |
+| Sin rayado en las caras | Nota |
 
-### Tipos de ladrillo (Ajustes)
-Para cada tipo se guarda:
-- la medida del molde;
-- las contracciones horizontal, vertical y longitudinal;
-- el largo cocido;
-- la densidad del cocido.
+Los mínimos y las tolerancias se configuran en *Ajustes → Reglas de la revisión técnica*. Los objetivos (medida cocida, % de vacío, peso máximo) se configuran en cada tipo.
 
-El primer tipo se crea solo al guardar el primer plano, con los valores del portante 12×19×33 que se pueden editar. Si se cambian los parámetros de un tipo, se recalculan todos sus moldes.
+## Plano y vistas
+
+Hoja A3 con:
+- **vista frontal** (sección de huecos) acotada en cadena;
+- **vista superior** (cara 330 × 190) y **vista lateral** (cara 120 × 190), con el rayado;
+- imagen 3D y rótulo.
+
+Botones: *Imprimir / PDF*, *SVG*, *DXF cocido* y *DXF molde*.
+
+## Administrador
+
+- La contraseña se guarda **solo en Apps Script**, en la propiedad del script `ADMIN_PASS`. No está en el repositorio.
+- La sesión dura 12 horas. Va firmada con una clave interna que se genera sola (`TOKEN_SECRET`).
+
+| Acción | Usuario | Admin |
+|---|---|---|
+| Ver catálogo, 3D, plano, revisión, comparar | ✔ | ✔ |
+| Cargar plano nuevo | ✔ (salvo que se active «Solo el administrador puede cargar planos») | ✔ |
+| Editar o borrar variantes | — | ✔ |
+| Crear, editar o borrar tipos | — | ✔ |
+| Editar familias y reglas de revisión | — | ✔ |
+| Importar ejemplos | — | ✔ |
+
+En modo local (sin planilla) todo queda habilitado y se guarda solo en el navegador.
+
+## Escala de los PDF
+
+En los PDF de AutoCAD las cotas vienen dibujadas como líneas y no como texto, así que el PDF no dice cuánto mide el molde. La app usa la medida exterior del molde (ancho × alto) guardada en el **tipo**. Por ejemplo, el P12 usa 344 × 125 mm. Los DXF ya vienen en milímetros, así que son la entrada recomendada.
 
 ## Puesta en marcha
 
-### Apps Script (una sola vez)
-1. Abrí el proyecto de Apps Script y reemplazá `Code.gs` por `apps-script/Code.gs`.
-2. En *Configuración del proyecto* activá «Mostrar el archivo de manifiesto» y reemplazá `appsscript.json` por `apps-script/appsscript.json`.
-3. Elegí la función **`autorizar`** y tocá **Ejecutar**. Aceptá los permisos. Esto:
-   - crea la planilla **«Extrusión de moldes - Catálogo»** dentro de la carpeta de planos, con las hojas `Tipos`, `Moldes`, `Geometrias` y `Log`;
-   - escribe en el registro la dirección de la planilla y la de la carpeta.
-4. *Implementar → Administrar implementaciones → ✏️ Editar → Versión: Nueva versión → Implementar*. Así se mantiene la misma URL `/exec` que ya está en `config.js`.
-   - Si es la primera implementación: *Implementar → Nueva implementación → Aplicación web*, ejecutar como **Yo**, acceso **Cualquier usuario**.
-
-La carpeta de planos ya viene configurada (`CARPETA_DEFECTO` en `Code.gs`). Para usar otra carpeta, agregá la propiedad `CARPETA_ID`. Para proteger la app con clave, agregá la propiedad `API_KEY`; cada usuario carga esa clave en *Ajustes*.
+### Apps Script
+1. Reemplazá `Code.gs` por `apps-script/Code.gs`. Si cambió el manifiesto, reemplazá también `appsscript.json`.
+2. *Configuración del proyecto → Propiedades del script*: agregá
+   - `ADMIN_PASS`: la contraseña del administrador;
+   - opcionalmente, `API_KEY` (clave de acceso para todos) y `CARPETA_ID` (otra carpeta de planos).
+3. Ejecutá **`autorizar`** una vez. Crea la planilla «Extrusión de moldes - Catálogo» dentro de la carpeta de planos y la hoja `Config`.
+4. *Implementar → Administrar implementaciones → ✏️ → Versión: Nueva versión → Implementar*. Así se mantiene la URL `/exec` de `config.js`.
 
 ### GitHub Pages
-Subí `index.html`, `styles.css`, `config.js`, `geo.js`, `datos.js`, `visor.js`, `app.js`, `seed.json`, `img/` y este README. La URL `/exec` va en `config.js` (`SCRIPT_URL`).
+Subí `index.html`, `styles.css`, `config.js`, `geo.js`, `revision.js`, `plano.js`, `datos.js`, `visor.js`, `app.js`, `seed.json`, `img/` y este README.
 
 ### Navegador
-La animación se graba en el navegador. Usá Chrome o Edge en una PC, que lo graban a 30 cuadros por segundo. Si el navegador no puede grabar video, se guarda solo la imagen.
+La animación se graba en el navegador. Usá Chrome o Edge en una PC, por https (GitHub Pages ya lo es). Si el navegador no puede grabar video, se guarda solo la imagen.
