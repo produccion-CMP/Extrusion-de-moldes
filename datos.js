@@ -16,6 +16,14 @@ const CONFIG_DEFECTO = {
     { id: 'climablock', nombre: 'Climablock', icono: '❄️', descripcion: 'Bloques de alta aislación térmica' }
   ],
   umbrales: { paredMin: 6.0, tabiqueMin: 5.5, huecoMin: 10, radioMin: 1.5, tolSimetria: 0.3, tolUniforme: 0.25, tolBalance: 0.3, tolMedida: 2.0, tolEscala: 0.5 },
+  gruposPiezas: [
+    { id: 'ejes', nombre: 'Ejes y árboles', icono: '🔩', descripcion: 'Ejes, árboles y pernos torneados', metodo: 'revolucion' },
+    { id: 'bujes', nombre: 'Bujes y casquillos', icono: '⭕', descripcion: 'Bujes, casquillos, camisas y anillos', metodo: 'revolucion' },
+    { id: 'poleas', nombre: 'Poleas y engranajes', icono: '⚙️', descripcion: 'Poleas, piñones, coronas y ruedas', metodo: 'revolucion' },
+    { id: 'placas', nombre: 'Placas y bridas', icono: '🔲', descripcion: 'Chapas, bridas, tapas y placas cortadas', metodo: 'extrusion' },
+    { id: 'soportes', nombre: 'Soportes y bastidores', icono: '🏗️', descripcion: 'Soportes, ménsulas y piezas soldadas', metodo: 'vistas' },
+    { id: 'extrusora', nombre: 'Extrusora', icono: '🌀', descripcion: 'Hélices, camisas, rejillas y piezas de la extrusora', metodo: 'vistas' }
+  ],
   soloAdminCarga: false
 };
 
@@ -65,14 +73,14 @@ async function remotoPost(payload) {
 }
 
 const Local = {
-  leer() { return LS.get('mt_local', { tipos: [], moldes: [], geos: {} }); },
+  leer() { const d = LS.get('mt_local', { tipos: [], moldes: [], geos: {} }); if (!d.piezas) d.piezas = []; return d; },
   guardar(d) { if (!LS.set('mt_local', d)) throw new Error('No hay espacio en el navegador para guardar más moldes. Conectá la planilla en Ajustes.'); },
   nuevoId(lista, pref, ancho) {
     let max = 0;
     lista.forEach(x => { const m = String(x.id).match(new RegExp('^' + pref + '-(\\d+)$')); if (m) max = Math.max(max, +m[1]); });
     return pref + '-' + String(max + 1).padStart(ancho, '0');
   },
-  catalogo() { const d = this.leer(); return { tipos: d.tipos, moldes: d.moldes, config: Object.assign(JSON.parse(JSON.stringify(CONFIG_DEFECTO)), d.config || {}), adminConfigurado: true, servidor: new Date().toISOString() }; },
+  catalogo() { const d = this.leer(); return { tipos: d.tipos, moldes: d.moldes, piezas: d.piezas, config: Object.assign(JSON.parse(JSON.stringify(CONFIG_DEFECTO)), d.config || {}), adminConfigurado: true, servidor: new Date().toISOString() }; },
   geometria(id) { const d = this.leer(); if (!d.geos[id]) throw new Error('No hay geometría guardada para ' + id); return { id, geo: d.geos[id] }; },
   guardarTipo(d, t) {
     if (!t.nombre) throw new Error('El tipo necesita un nombre');
@@ -118,6 +126,24 @@ const Local = {
       d.moldes = d.moldes.filter(m => m.id !== p.id);
       delete d.geos[p.id];
       r = { msg: 'Molde eliminado' };
+    } else if (p.accion === 'guardarPieza') {
+      const pz = Object.assign({}, p.pieza);
+      const pl = (p.archivos || []).find(a => a.rol === 'plano');
+      if (pl) pz.archivo = pl.nombre;
+      const i = d.piezas.findIndex(x => x.id === pz.id);
+      if (i < 0 && !pz.grupo) throw new Error('Elegí el grupo de la pieza');
+      if (i < 0 && !pz.nombre) throw new Error('La pieza necesita un nombre');
+      const id = i >= 0 ? pz.id : (pz.id || this.nuevoId(d.piezas, 'PZ', 4));
+      const ahora = new Date().toISOString();
+      const o = Object.assign({}, i >= 0 ? d.piezas[i] : { creado: ahora }, pz, { id, actualizado: ahora });
+      if (i >= 0) d.piezas[i] = o; else d.piezas.push(o);
+      if (p.geo) d.geos[id] = p.geo;
+      r = { id, msg: i >= 0 ? 'Pieza actualizada' : 'Pieza guardada como ' + id };
+    } else if (p.accion === 'borrarPieza') {
+      if (!d.piezas.some(x => x.id === p.id)) throw new Error('No existe la pieza ' + p.id);
+      d.piezas = d.piezas.filter(x => x.id !== p.id);
+      delete d.geos[p.id];
+      r = { msg: 'Pieza eliminada' };
     } else if (p.accion === 'importar') {
       const mT = {}, mM = {};
       (p.tipos || []).forEach(t => { mT[t.id] = this.guardarTipo(d, Object.assign({}, t, { id: '' })).id; });
@@ -151,8 +177,8 @@ const API = {
   async enviar(p) {
     if (modoLocal()) return Local.enviar(p);
     const r = await remotoPost(p);
-    if (p.accion === 'guardarMolde' && p.geo && r.id) LS.set('mt_geo_' + r.id, p.geo);
-    if (p.accion === 'borrarMolde') LS.del('mt_geo_' + p.id);
+    if ((p.accion === 'guardarMolde' || p.accion === 'guardarPieza') && p.geo && r.id) LS.set('mt_geo_' + r.id, p.geo);
+    if (p.accion === 'borrarMolde' || p.accion === 'borrarPieza') LS.del('mt_geo_' + p.id);
     return r;
   }
 };

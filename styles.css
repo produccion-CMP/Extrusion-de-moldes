@@ -738,3 +738,37 @@ details.card.mas > summary { font-size: .95rem; color: var(--text); }
 .vcard .mc-k div { background: var(--panel-2); border-radius: 9px; padding: 6px 8px; }
 .vcard .mc-k span { display: block; font-size: .64rem; color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
 .vcard .mc-k b { font-size: .9rem; }
+.mini-pieza { width: 100%; aspect-ratio: 1.5; border-radius: 12px; border: 1px solid var(--line); background: linear-gradient(180deg, #f4f6f8, #e6eaee); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.mini-pieza img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mini-pieza.vacio span { color: var(--muted); font-size: .82rem; font-weight: 700; }
+.mini-pieza.vacio span:only-child { font-size: 1.6rem; }
+.fcard .mini-pieza.vacio span { font-size: .82rem; }
+.vcard.pz .mc-k b.corto { font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.buscador { margin-bottom: 14px; }
+.buscador input { width: 100%; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: .95rem; }
+.buscador input:focus { outline: none; border-color: var(--accent); }
+.chips { margin-bottom: 14px; }
+.chip i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; border: 1px solid var(--line); }
+.tabla-datos { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.tabla-datos td { padding: 7px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tabla-datos td:first-child { color: var(--muted); font-weight: 700; width: 42%; }
+.dibujo-pz { width: 100%; height: auto; max-height: 520px; display: block; background: #fff; border-radius: 12px; border: 1px solid var(--line); }
+.dibujo-pz text { font-family: inherit; }
+.perfiles { display: grid; gap: 12px; }
+.perfil-pz { margin: 0; }
+.perfil-pz figcaption { font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+.perfil-pz figcaption b { color: var(--text); }
+.perfil-pz svg { width: 100%; height: auto; max-height: 300px; display: block; background: #fff; border-radius: 12px; border: 1px solid var(--line); padding: 8px; box-sizing: border-box; overflow: visible; }
+.pf-solido { fill: #c9d4de; stroke: none; }
+.pf-reg { cursor: pointer; stroke: #1f2933; stroke-width: 1.4; vector-effect: non-scaling-stroke; transition: fill .15s; }
+.pf-reg.s { fill: #9fb3c6; fill-opacity: .55; }
+.pf-reg.h { fill: #fff; stroke: #d64545; stroke-dasharray: 5 3; }
+.pf-reg:hover { fill: var(--accent); fill-opacity: .35; }
+.metodo-seg button { white-space: nowrap; }
+.metodos .metodo { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.metodos .metodo .e { font-size: 1.8rem; }
+.metodos .metodo span { color: var(--muted); font-size: .86rem; }
+.fam-fila select { flex: 0 0 170px; width: 170px; }
+.fam-fila input[data-k=icono] { flex: 0 0 56px; }
+.fam-fila > .sub { flex: 0 0 auto; font-size: .76rem; white-space: nowrap; }
+@media (max-width: 700px) { .fam-fila { flex-wrap: wrap; } .fam-fila input[data-k=descripcion] { flex-basis: 100%; } }

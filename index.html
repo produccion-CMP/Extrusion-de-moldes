@@ -22,14 +22,16 @@
       } catch (e) {}
     })();
   </script>
-  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.8.3/build/index.module.js","three-bvh-csg":"https://cdn.jsdelivr.net/npm/three-bvh-csg@0.0.17/build/index.module.js"}}</script>
   <script src="config.js" defer></script>
   <script src="geo.js" defer></script>
   <script src="revision.js" defer></script>
   <script src="plano.js" defer></script>
   <script src="datos.js" defer></script>
   <script src="app.js" defer></script>
+  <script src="piezas.js" defer></script>
   <script type="module" src="visor.js"></script>
+  <script type="module" src="pieza3d.js"></script>
 </head>
 <body>
   <div id="splash">
@@ -44,7 +46,7 @@
   <header class="top">
     <a class="brand" href="#/catalogo">
       <span class="logo-tile"><img src="img/logo-cmp.png" alt=""></span>
-      <div>Extrusión<small>Moldes · Ladrillo cocido</small></div>
+      <div>Extrusión<small>Moldes · Piezas en 3D</small></div>
     </a>
     <nav class="nav" id="nav" aria-label="Secciones"></nav>
     <div class="top-right">

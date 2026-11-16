@@ -11,8 +11,38 @@ Del plano del molde de extrusión (PDF o DXF de AutoCAD) al **ladrillo cocido en
 | **Tipo** | Variantes del molde con **vista previa del plano**, huecos, % de vacío, peso y estado de la revisión |
 | **Variante** | Pestañas: 3D · Plano y vistas · Revisión · Medidas · Versiones |
 | **Nuevo plano** | Soltar el PDF o DXF → 3D cocido + revisión + plano → guardar con animación |
+| **Piezas** | Piezas de máquinas en 3D, agrupadas por tipo (ejes, bujes, poleas, placas, soportes…) |
 | **Comparar** | Dos variantes lado a lado |
 | **Ajustes** | Acceso de administrador, familias, tipos, reglas de revisión, conexión |
+
+## Piezas de máquinas
+
+Pantallas: **Grupos** → **piezas del grupo** (filtro por máquina) → **ficha** con 3D, medidas, peso, datos y archivos.
+
+| Entrada | Qué hace la app |
+|---|---|
+| PDF o DXF con vistas | Encuentra las vistas del plano, ignora el marco y el rótulo, y propone frente, planta y lateral según su ubicación |
+| STEP, IGES, STL u OBJ | Muestra el modelo 3D directo, en mm |
+
+| Método | Para qué piezas | Qué usa |
+|---|---|---|
+| 🔄 Revolución | Ejes, bujes, poleas, bridas torneadas | Un perfil que gira sobre su eje. El eje se propone solo según la simetría |
+| ▭ Extrusión | Placas, chapas, bridas cortadas | Un perfil con espesor. El espesor sale de la otra vista o se escribe |
+| 🧊 Por vistas | Soportes, ménsulas, piezas prismáticas | Intersección de frente, planta y lateral. Admite ISO E (IRAM) y ISO A |
+
+- En **Huecos y macizos** se toca un área para pasarla de hueco a macizo o al revés. Por ejemplo, el agujero de un buje en un corte.
+- En **Capas del plano** se activan o desactivan capas: cotas, ejes, líneas ocultas. Por defecto se ignoran las capas de cotas, ejes, ocultas y textos.
+- La escala se pone como 1:N o con el ancho real de la vista.
+- Peso = volumen × densidad del material.
+- Descargas: **STL** (para impresión 3D) e imagen.
+- **Corte**: muestra el interior.
+- Se guarda la receta de la pieza: las vistas y los parámetros, o la malla si es un modelo 3D.
+- En Drive se suben el archivo original, la animación y una imagen, en `Piezas de máquinas/<grupo>/`.
+- Los grupos se crean y editan en *Ajustes → Grupos de piezas* o con **＋ Nuevo grupo**. Solo el administrador puede hacerlo. Cada grupo tiene un método por defecto.
+
+Límites de los planos 2D:
+- Por vistas arma la silueta común de las vistas. Los agujeros ciegos y las ranuras internas que no se ven en ninguna vista salen pasantes o no salen.
+- En revolución no entran los agujeros que no son coaxiales, como los de los bulones de una brida. Para eso conviene el modelo STEP.
 
 ## Revisión del plano
 
@@ -54,6 +84,9 @@ Botones: *Imprimir / PDF*, *SVG*, *DXF cocido* y *DXF molde*.
 | Editar o borrar variantes | — | ✔ |
 | Crear, editar o borrar tipos | — | ✔ |
 | Editar familias y reglas de revisión | — | ✔ |
+| Crear y editar grupos de piezas | — | ✔ |
+| Cargar piezas | ✔ (misma regla que los planos) | ✔ |
+| Editar o borrar piezas | — | ✔ |
 | Importar ejemplos | — | ✔ |
 
 En modo local (sin planilla) todo queda habilitado y se guarda solo en el navegador.
@@ -69,11 +102,11 @@ En los PDF de AutoCAD las cotas vienen dibujadas como líneas y no como texto, a
 2. *Configuración del proyecto → Propiedades del script*: agregá
    - `ADMIN_PASS`: la contraseña del administrador;
    - opcionalmente, `API_KEY` (clave de acceso para todos) y `CARPETA_ID` (otra carpeta de planos).
-3. Ejecutá **`autorizar`** una vez. Crea la planilla «Extrusión de moldes - Catálogo» dentro de la carpeta de planos y la hoja `Config`.
+3. Ejecutá **`autorizar`** una vez. Crea la planilla «Extrusión de moldes - Catálogo» dentro de la carpeta de planos y las hojas que falten (`Config`, `Piezas`).
 4. *Implementar → Administrar implementaciones → ✏️ → Versión: Nueva versión → Implementar*. Así se mantiene la URL `/exec` de `config.js`.
 
 ### GitHub Pages
-Subí `index.html`, `styles.css`, `config.js`, `geo.js`, `revision.js`, `plano.js`, `datos.js`, `visor.js`, `app.js`, `seed.json`, `img/` y este README.
+Subí `index.html`, `styles.css`, `config.js`, `geo.js`, `revision.js`, `plano.js`, `datos.js`, `visor.js`, `app.js`, `piezas.js`, `pieza3d.js`, `seed.json`, `img/` y este README.
 
 ### Navegador
 La animación se graba en el navegador. Usá Chrome o Edge en una PC, por https (GitHub Pages ya lo es). Si el navegador no puede grabar video, se guarda solo la imagen.

@@ -2,13 +2,14 @@
 
 const VISTAS = [
   { id: 'catalogo', e: '🧱', n: 'Catálogo' },
+  { id: 'piezas', e: '⚙️', n: 'Piezas' },
   { id: 'nuevo', e: '📄', n: 'Nuevo plano' },
   { id: 'comparar', e: '⚖️', n: 'Comparar' },
-  { id: 'ajustes', e: '⚙️', n: 'Ajustes' }
+  { id: 'ajustes', e: '🛠️', n: 'Ajustes' }
 ];
 const BNAV = VISTAS;
 const FRASES = ['Midiendo dados…', 'Leyendo planos…', 'Calculando contracciones…', 'Horneando a 900 °C…', 'Contando huecos…'];
-const ST = { config: null, tipos: [], moldes: [], cargado: false, vista: 'catalogo', args: [], filtro: { q: '', familia: '', estado: '' }, geo: {}, visor: null, carga: null };
+const ST = { config: null, tipos: [], moldes: [], piezas: [], cargado: false, vista: 'catalogo', args: [], filtro: { q: '', familia: '', estado: '' }, geo: {}, visor: null, carga: null };
 
 const app = () => $('app');
 
@@ -393,7 +394,8 @@ async function respaldo() {
   try {
     const geos = {};
     for (const m of ST.moldes) geos[m.id] = await geometriaDe(m.id);
-    descargar('matrices_respaldo_' + hoyLocal() + '.json', JSON.stringify({ fecha: new Date().toISOString(), tipos: ST.tipos, moldes: ST.moldes, geos }), 'application/json');
+    for (const p of ST.piezas) { try { geos[p.id] = await API.geometria(p.id); } catch (e) {} }
+    descargar('matrices_respaldo_' + hoyLocal() + '.json', JSON.stringify({ fecha: new Date().toISOString(), config: ST.config, tipos: ST.tipos, moldes: ST.moldes, piezas: ST.piezas, geos }), 'application/json');
   } catch (err) { toast(err.message, 'bad'); } finally { loader(false); }
 }
 
@@ -690,7 +692,7 @@ function opcionesTipos(sel, conNuevo) {
 }
 
 function pintarNav() {
-  const v = ['molde', 'familia', 'tipo'].includes(ST.vista) ? 'catalogo' : ST.vista;
+  const v = ['molde', 'familia', 'tipo'].includes(ST.vista) ? 'catalogo' : ['grupo', 'pieza', 'nuevapieza'].includes(ST.vista) ? 'piezas' : ST.vista;
   const vis = VISTAS.filter(x => x.id !== 'nuevo' || puedeCargar());
   $('nav').innerHTML = vis.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}" title="${x.n}"><span class="e">${x.e}</span><span class="tx">${x.n}</span></a>`).join('');
   $('bnav').innerHTML = vis.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}"><span class="e">${x.e}</span>${x.n}</a>`).join('');
@@ -1058,6 +1060,7 @@ async function vistaAjustes() {
     <div class="card" style="margin-top:16px"><div class="card-h"><div class="t"><h3>🩺 Reglas de la revisión técnica</h3><span class="sub">Valores del ladrillo cocido salvo que se indique</span></div><div class="acciones" style="margin:0"><button class="btn pri" id="bGuardarU">💾 Guardar</button></div></div>
       <div class="form">${campoU('paredMin', 'Pared exterior mínima (mm)', '0.1')}${campoU('tabiqueMin', 'Tabique mínimo (mm)', '0.1')}${campoU('huecoMin', 'Lado mínimo de hueco (mm)', '0.5')}${campoU('radioMin', 'Radio mínimo de esquina del dado (mm)', '0.1')}${campoU('tolSimetria', 'Tolerancia de simetría (mm)', '0.05')}${campoU('tolUniforme', 'Diferencia admitida entre tabiques (mm)', '0.05')}${campoU('tolBalance', 'Diferencia admitida entre paredes (mm)', '0.05')}${campoU('tolMedida', 'Tolerancia de medida cocida (± mm)', '0.1')}${campoU('tolEscala', 'Tolerancia de proporción del plano (%)', '0.1')}
       <label class="f full chk" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="uSoloAdmin" ${ST.config && ST.config.soloAdminCarga ? 'checked' : ''}> Solo el administrador puede cargar planos nuevos</label></div></div>
+    ${cardGruposPiezas()}
     ${cardHtml('🧪 Ejemplos y respaldo', '', `<div class="acciones" style="margin-top:0"><button class="btn" id="bSeed2">📥 Importar los 4 moldes de ejemplo (P12)</button><button class="btn" id="bBackup">⬇️ Descargar respaldo</button></div>`, ' style="margin-top:16px"')}` : ''}
     ${cardHtml('🔌 Conexión', 'URL /exec de Apps Script (se guarda en este navegador)', `<div id="infoLinks"></div><form class="form" id="formCx" autocomplete="off"><label class="f w2">URL /exec<input id="cUrl" type="url" value="${esc(c.url || '')}" placeholder="https://script.google.com/macros/s/.../exec"></label><label class="f">Clave de acceso<input id="cKey" type="password" value="${esc(c.key || '')}" placeholder="Opcional"></label><label class="f">👤 Tu nombre<input id="cUsu" maxlength="60" value="${esc(c.usuario || '')}"></label>
       <div class="full acciones" style="margin-top:0"><button class="btn" type="button" id="bLocal">💾 Modo local</button><button class="btn" type="button" id="bCache">🧹 Borrar caché</button><button class="btn pri" type="submit">🔌 Guardar y probar</button></div></form>`, ' style="margin-top:16px"')}
@@ -1092,6 +1095,7 @@ async function vistaAjustes() {
         try { toast((await API.enviar({ accion: 'borrarTipo', id: b.dataset.borrar })).msg, 'ok'); await cargar(true); } catch (err) { toast(err.message, 'bad'); } finally { loader(false); }
       };
     });
+    enlazarGruposPiezas();
     $('bSeed2').onclick = importarSeed;
     $('bBackup').onclick = respaldo;
   }
@@ -1130,8 +1134,9 @@ function aplicar(d) {
   const nums = ['contrH', 'contrV', 'contrL', 'largo', 'densidad', 'anchoMolde', 'altoMolde', 'anchoObj', 'altoObj', 'vacioMin', 'vacioMax', 'pesoMax'];
   ST.tipos = (d.tipos || []).map(t => { const o = Object.assign({}, t); nums.forEach(k => { o[k] = num(t[k]); }); return o; });
   ST.moldes = (d.moldes || []).map(m => Object.assign({}, m, { metricas: typeof m.metricas === 'string' ? (() => { try { return JSON.parse(m.metricas); } catch (e) { return null; } })() : m.metricas }));
+  ST.piezas = (d.piezas || []).map(z => Object.assign({}, z, { medidas: typeof z.medidas === 'string' ? (() => { try { return JSON.parse(z.medidas); } catch (e) { return null; } })() : z.medidas }));
   ST.cargado = true;
-  const enCarga = ST.vista === 'nuevo' && ST.carga && ST.carga.lect;
+  const enCarga = (ST.vista === 'nuevo' && ST.carga && ST.carga.lect) || (ST.vista === 'nuevapieza' && PZ.carga);
   if (!enCarga) render();
 }
 
@@ -1141,7 +1146,7 @@ function leerRuta() {
   let v = partes[0] || 'catalogo';
   if (v === 'cargar') v = 'nuevo';
   if (v === 'tipos') v = 'ajustes';
-  return { v: ['catalogo', 'familia', 'tipo', 'molde', 'nuevo', 'comparar', 'ajustes'].includes(v) ? v : 'catalogo', args: partes.slice(1) };
+  return { v: ['catalogo', 'familia', 'tipo', 'molde', 'nuevo', 'comparar', 'ajustes', 'piezas', 'grupo', 'pieza', 'nuevapieza'].includes(v) ? v : 'catalogo', args: partes.slice(1) };
 }
 
 function render() {
@@ -1150,13 +1155,19 @@ function render() {
   ST.vista = r.v; ST.args = r.args;
   pintarNav();
   if (ST.visor) { ST.visor.destruir(); ST.visor = null; }
-  if (!ST.cargado && !['ajustes', 'nuevo'].includes(ST.vista)) { app().innerHTML = `<section class="vista"><div class="card">${procesando('Cargando catálogo…')}</div></section>`; return; }
+  if (PZ.visor) { PZ.visor.destruir(); PZ.visor = null; }
+  if (ST.vista !== 'nuevapieza') PZ.carga = null;
+  if (!ST.cargado && !['ajustes', 'nuevo', 'nuevapieza'].includes(ST.vista)) { app().innerHTML = `<section class="vista"><div class="card">${procesando('Cargando catálogo…')}</div></section>`; return; }
   if (ST.vista === 'catalogo') vistaCatalogo();
   else if (ST.vista === 'familia') vistaFamilia(ST.args[0]);
   else if (ST.vista === 'tipo') vistaTipo(ST.args[0]);
   else if (ST.vista === 'molde') vistaMolde(ST.args[0]);
   else if (ST.vista === 'nuevo') pintarNuevo();
   else if (ST.vista === 'comparar') vistaComparar(ST.args[0], ST.args[1]);
+  else if (ST.vista === 'piezas') vistaPiezas();
+  else if (ST.vista === 'grupo') vistaGrupo(ST.args[0]);
+  else if (ST.vista === 'pieza') vistaPieza(ST.args[0]);
+  else if (ST.vista === 'nuevapieza') vistaNuevaPieza();
   else vistaAjustes();
 }
 

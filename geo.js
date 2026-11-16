@@ -915,6 +915,230 @@ const Geo = (() => {
     return p(geo.marco) + geo.huecos.map(p).join('');
   }
 
+
+  const EXCL_CAPA = /(cota|dim|text|txt|texto|eje|axis|center|centro|oculta|hidden|hatch|rayado|achur|marco|rotulo|rótulo|cajet|title|border|defpoints|viewport|vport|simetr)/i;
+
+  function capasPieza(lect) {
+    const vis = lect.capas.filter(c => !c.oculta);
+    const k = vis.filter(c => !(lect.tipo === 'pdf' && c.key[0] === 'R') && !(lect.tipo === 'dxf' && EXCL_CAPA.test(c.key.slice(2))));
+    return (k.length ? k : vis).map(c => c.key);
+  }
+
+  function componentes(R) {
+    const { m, W, H } = R;
+    const cid = new Int32Array(W * H), pila = new Int32Array(W * H), comps = [null];
+    for (let p = 0; p < W * H; p++) {
+      if (!m[p] || cid[p]) continue;
+      const id = comps.length;
+      let top = 0, n = 0, x0 = W, y0 = H, x1 = 0, y1 = 0;
+      pila[top++] = p; cid[p] = id;
+      while (top) {
+        const q = pila[--top];
+        n++;
+        const x = q % W, y = (q - x) / W;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= H) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= W) continue;
+            const r = yy * W + xx;
+            if (m[r] && !cid[r]) { cid[r] = id; pila[top++] = r; }
+          }
+        }
+      }
+      comps.push({ id, n, x0, y0, x1, y1, ini: p });
+    }
+    return { cid, comps };
+  }
+
+  function arbol(R, E, C) {
+    const { W } = R;
+    const regsDe = new Map(), compsDe = new Map();
+    for (const r of E.regiones) {
+      if (!r || r.toca) continue;
+      r.comp = r.ini >= W ? C.cid[r.ini - W] : 0;
+      if (!regsDe.has(r.comp)) regsDe.set(r.comp, []);
+      regsDe.get(r.comp).push(r);
+    }
+    for (const c of C.comps) {
+      if (!c) continue;
+      c.fuera = c.ini > 0 ? E.lab[c.ini - 1] : 0;
+      if (!compsDe.has(c.fuera)) compsDe.set(c.fuera, []);
+      compsDe.get(c.fuera).push(c);
+    }
+    const sub = (cId, out, prof) => {
+      for (const r of regsDe.get(cId) || []) { out.push(r); if (prof < 40) for (const c2 of compsDe.get(r.id) || []) sub(c2.id, out, prof + 1); }
+      return out;
+    };
+    return { regsDe, compsDe, sub: cId => sub(cId, [], 0) };
+  }
+
+  function vistasPieza(lect, opts) {
+    const o = Object.assign({ capas: null, marco: 'auto' }, opts || {});
+    const keys = o.capas && o.capas.length ? o.capas : capasPieza(lect);
+    const sel = lect.capas.filter(c => keys.includes(c.key));
+    if (!sel.length) throw new Error('No hay trazos en las capas elegidas');
+    const bb = bboxCapas(sel);
+    if (!isFinite(bb.x0) || bb.x1 - bb.x0 <= 0 || bb.y1 - bb.y0 <= 0) throw new Error('El plano no tiene trazos');
+    const R = rasterizar(sel, bb, 2000, 0.0011, 4e6);
+    const E = etiquetar(R), C = componentes(R), T = arbol(R, E, C);
+    const total = R.W * R.H;
+    const fondo = new Set(E.regiones.filter(r => r && r.toca).map(r => r.id));
+    fondo.add(0);
+    const marcos = [];
+    const detectar = forzar => {
+      for (let it = 0; it < 3; it++) {
+        let nuevo = false;
+        for (const c of C.comps) {
+          if (!c || marcos.includes(c.id) || !fondo.has(c.fuera)) continue;
+          const ext = (c.x1 - c.x0) >= 0.9 * (R.W - 2 * R.pad) && (c.y1 - c.y0) >= 0.9 * (R.H - 2 * R.pad);
+          if (!ext) continue;
+          const dentro = T.regsDe.get(c.id) || [];
+          const mayor = dentro.reduce((a, r) => (!a || r.area > a.area ? r : a), null);
+          const caja = mayor && (mayor.x1 - mayor.x0) >= 0.9 * (c.x1 - c.x0) && (mayor.y1 - mayor.y0) >= 0.9 * (c.y1 - c.y0);
+          if (forzar ? caja : (caja && dentro.length >= 3 && (T.compsDe.get(mayor.id) || []).length >= 1)) {
+            marcos.push(c.id);
+            dentro.forEach(r => fondo.add(r.id));
+            nuevo = true;
+          }
+        }
+        if (!nuevo) break;
+      }
+    };
+    if (o.marco !== 'no') detectar(o.marco === 'si');
+    const candidatos = () => {
+      const out = [];
+      for (const c of C.comps) {
+        if (!c || marcos.includes(c.id) || !fondo.has(c.fuera)) continue;
+        const regs = T.sub(c.id);
+        const a = regs.reduce((s, r) => s + r.area, 0);
+        if (a < 0.0015 * total) continue;
+        const p0 = R.aMundo(c.x0, c.y1), p1 = R.aMundo(c.x1, c.y0);
+        out.push({ comp: c.id, area: a / (R.esc * R.esc), x0: p0[0], y0: p0[1], x1: p1[0], y1: p1[1], w: p1[0] - p0[0], h: p1[1] - p0[1], cx: (p0[0] + p1[0]) / 2, cy: (p0[1] + p1[1]) / 2 });
+      }
+      return out.sort((a, b) => b.area - a.area);
+    };
+    let vs = candidatos();
+    if (!vs.length && marcos.length && o.marco === 'auto') { marcos.length = 0; fondo.clear(); fondo.add(0); E.regiones.forEach(r => { if (r && r.toca) fondo.add(r.id); }); vs = candidatos(); }
+    vs = vs.slice(0, 12).map((v, i) => Object.assign(v, { id: i + 1 }));
+    return { capas: keys, marco: marcos.length > 0, vistas: vs, roles: rolesVistas(vs), bb };
+  }
+
+  function rolesVistas(vs) {
+    if (!vs.length) return {};
+    const tol = 0.04 * Math.max(...vs.map(v => Math.max(v.w, v.h)));
+    const alV = (a, b) => Math.abs(a.x0 - b.x0) < tol && Math.abs(a.x1 - b.x1) < tol;
+    const alH = (a, b) => Math.abs(a.y0 - b.y0) < tol && Math.abs(a.y1 - b.y1) < tol;
+    let mejor = null;
+    for (const v of vs) {
+      const nv = vs.filter(u => u !== v && alV(u, v)), nh = vs.filter(u => u !== v && alH(u, v));
+      const sc = (nv.length ? 2 : 0) + (nh.length ? 2 : 0) + v.area / vs[0].area;
+      if (!mejor || sc > mejor.sc) mejor = { v, nv, nh, sc };
+    }
+    const f = mejor.v;
+    const cerca = l => l.sort((a, b) => Math.hypot(a.cx - f.cx, a.cy - f.cy) - Math.hypot(b.cx - f.cx, b.cy - f.cy))[0];
+    const p = cerca(mejor.nv), l = cerca(mejor.nh);
+    const r = { frente: f.id };
+    if (p) { r.planta = p.id; r.posPlanta = p.cy < f.cy ? 'abajo' : 'arriba'; }
+    if (l) { r.lateral = l.id; r.posLateral = l.cx > f.cx ? 'der' : 'izq'; }
+    return r;
+  }
+
+  function perfilVista(lect, keys, bbV, opts) {
+    const o = Object.assign({ maxLado: 2600, maxPix: 7e6, cambios: [], defectoHueco: true }, opts || {});
+    const sel = lect.capas.filter(c => keys.includes(c.key));
+    const mg = 0.05 * Math.max(bbV.x1 - bbV.x0, bbV.y1 - bbV.y0);
+    const bb = { x0: bbV.x0 - mg, y0: bbV.y0 - mg, x1: bbV.x1 + mg, y1: bbV.y1 + mg };
+    const R = rasterizar(sel, bb, o.maxLado, 0.0009, o.maxPix);
+    const E = etiquetar(R), C = componentes(R), T = arbol(R, E, C);
+    const { W, H } = R;
+    let vc = null;
+    for (const c of C.comps) {
+      if (!c) continue;
+      const fr = E.regiones[c.fuera];
+      if (!fr || !fr.toca) continue;
+      const regs = T.sub(c.id);
+      const a = regs.reduce((s, r) => s + r.area, 0);
+      if (!vc || a > vc.a) vc = { c, regs, a };
+    }
+    if (!vc || !vc.a) throw new Error('No se encontró un contorno cerrado en esa vista');
+    const S = new Set(vc.regs.map(r => r.id));
+    const BG = E.regiones.find(r => r && r.toca).id;
+    const lab = E.lab;
+    for (let p = 0; p < lab.length; p++) { const id = lab[p]; if (id && !S.has(id)) lab[p] = BG; }
+    cuencas(lab, R.m, W, H);
+    const borde = new Uint8Array(E.regiones.length);
+    for (let p = 0; p < lab.length; p++) {
+      const id = lab[p];
+      if (id === BG) continue;
+      const x = p % W;
+      if ((x > 0 && lab[p - 1] === BG) || (x < W - 1 && lab[p + 1] === BG) || (p >= W && lab[p - W] === BG) || (p < lab.length - W && lab[p + W] === BG)) borde[id] = 1;
+    }
+    const minA = 0.0008 * vc.a;
+    const regs = vc.regs.filter(r => r.area >= minA);
+    const hueco = new Map(regs.map(r => [r.id, o.defectoHueco && !borde[r.id]]));
+    const aPx = (x, y) => [Math.round((x - bb.x0) * R.esc + R.pad), Math.round((bb.y1 - y) * R.esc + R.pad)];
+    for (const ch of o.cambios || []) {
+      const [px, py] = aPx(ch.x, ch.y);
+      if (px < 0 || py < 0 || px >= W || py >= H) continue;
+      const id = lab[py * W + px];
+      if (hueco.has(id)) hueco.set(id, !!ch.h);
+    }
+    const tol = 0.8;
+    const aU = q => R.aMundo(q[0], q[1]);
+    const primero = new Int32Array(E.regiones.length).fill(-1);
+    for (let p = 0; p < lab.length; p++) { const id = lab[p]; if (primero[id] < 0) primero[id] = p; }
+    const regiones = regs.filter(r => primero[r.id] >= 0).map(r => {
+      const poly = dp(trazar(lab, W, H, r.id, primero[r.id]), 1.2).map(aU);
+      const q = R.aMundo(r.ini % W + 0.5, Math.floor(r.ini / W) + 0.5);
+      return { id: r.id, poly, hueco: hueco.get(r.id), borde: !!borde[r.id], x: q[0], y: q[1], area: r.area / (R.esc * R.esc) };
+    }).filter(r => r.poly.length >= 3);
+    const M = new Int32Array(W * H);
+    for (let p = 0; p < lab.length; p++) { const id = lab[p]; if (id !== BG && S.has(id) && !(hueco.has(id) && hueco.get(id))) M[p] = 1; }
+    const formas = formasDeMascara(M, W, H, tol, aU, minA);
+    if (!formas.length) throw new Error('La vista quedó vacía: marcaste todo como hueco');
+    return { formas, regiones, bb };
+  }
+
+  function formasDeMascara(M, W, H, tol, aU, minA) {
+    const lab = new Int32Array(W * H), pila = new Int32Array(W * H);
+    const llenar = (s, id, val) => {
+      let top = 0, area = 0, toca = false;
+      pila[top++] = s; lab[s] = id;
+      while (top) {
+        const p = pila[--top];
+        area++;
+        const x = p % W, y = (p - x) / W;
+        if (x === 0 || y === 0 || x === W - 1 || y === H - 1) toca = true;
+        if (x > 0 && M[p - 1] === val && !lab[p - 1]) { lab[p - 1] = id; pila[top++] = p - 1; }
+        if (x < W - 1 && M[p + 1] === val && !lab[p + 1]) { lab[p + 1] = id; pila[top++] = p + 1; }
+        if (y > 0 && M[p - W] === val && !lab[p - W]) { lab[p - W] = id; pila[top++] = p - W; }
+        if (y < H - 1 && M[p + W] === val && !lab[p + W]) { lab[p + W] = id; pila[top++] = p + W; }
+      }
+      return { id, area, toca, ini: s, val };
+    };
+    const comps = [null];
+    for (let p = 0; p < W * H; p++) if (!lab[p]) comps.push(llenar(p, comps.length, M[p]));
+    const solidos = comps.filter(c => c && c.val === 1 && c.area >= minA);
+    const out = new Map();
+    for (const c of solidos) out.set(c.id, { outer: dp(trazar(lab, W, H, c.id, c.ini), tol).map(aU), holes: [] });
+    for (const c of comps) {
+      if (!c || c.val !== 0 || c.toca || c.area < 4) continue;
+      const due = c.ini >= W ? lab[c.ini - W] : 0;
+      const f = out.get(due);
+      if (!f) continue;
+      const h = dp(trazar(lab, W, H, c.id, c.ini), tol).map(aU);
+      if (h.length >= 3) f.holes.push(h);
+    }
+    return [...out.values()].filter(f => f.outer.length >= 3).map(f => {
+      if (areaF(f.outer) < 0) f.outer.reverse();
+      f.holes = f.holes.map(h => (areaF(h) > 0 ? h.slice().reverse() : h));
+      return f;
+    });
+  }
+
   function reorientar(ext, giro, espejo) {
     const f = giro === 90 ? (x, y) => [-y, x] : giro === 180 ? (x, y) => [-x, -y] : giro === 270 ? (x, y) => [y, -x] : (x, y) => [x, y];
     const g = (x, y) => { const p = f(x, y); return espejo ? [-p[0], p[1]] : p; };
@@ -928,5 +1152,5 @@ const Geo = (() => {
     return Object.assign({}, ext, { marco: F, huecos: Hs, puentes: Bs, ancho: b.w, alto: b.h });
   }
 
-  return { dPolis, dSegPt, reorientar, leerPdf, leerDxf, extraer, detectarCapas, escalarMm, simplificar, metricas, cocer, dxfR12, svgPath, bbox, area, dp };
+  return { capasPieza, vistasPieza, perfilVista, dPolis, dSegPt, reorientar, leerPdf, leerDxf, extraer, detectarCapas, escalarMm, simplificar, metricas, cocer, dxfR12, svgPath, bbox, area, dp };
 })();
