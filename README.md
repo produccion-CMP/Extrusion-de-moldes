@@ -1,6 +1,6 @@
 # Extrusión de moldes – Planta Cevil
 
-Del plano del molde de extrusión (PDF o DXF de AutoCAD) al **ladrillo cocido en 3D**, con **revisión técnica del plano**, **plano con vistas** y **catálogo por familias**. Cada plano se guarda en Drive junto con la animación del ladrillo cocido, agrupado por tipo de ladrillo.
+Del plano del molde de extrusión (PDF o DXF de AutoCAD) al **ladrillo cocido en 3D**, con **revisión técnica del plano**, **plano con vistas** y **catálogo por familias**. Además, las **piezas del molde** (dados, marco, araña, boquilla) y de las máquinas pasan del plano a un sólido 3D. Todo se sube desde un solo lugar y cada plano se guarda en Drive con su animación.
 
 ## Navegación
 
@@ -10,14 +10,34 @@ Del plano del molde de extrusión (PDF o DXF de AutoCAD) al **ladrillo cocido en
 | **Familia** | Tipos de la familia (H8, H12, H18, P12, P18…) con cantidad de variantes |
 | **Tipo** | Variantes del molde con **vista previa del plano**, huecos, % de vacío, peso y estado de la revisión |
 | **Variante** | Pestañas: 3D · Plano y vistas · Revisión · Medidas · Versiones |
-| **Nuevo plano** | Soltar el PDF o DXF → 3D cocido + revisión + plano → guardar con animación |
-| **Piezas** | Piezas de máquinas en 3D, agrupadas por tipo (ejes, bujes, poleas, placas, soportes…) |
+| **Subir plano** | Un solo lugar para todos los planos: la app identifica si es **ladrillo** o **pieza** y lo lleva a su sección |
+| **Nuevo plano** | Ladrillo: 3D cocido + revisión + plano → guardar con animación |
+| **Piezas** | Piezas de moldes y máquinas en 3D, por grupo: molde/matriz, araña, boquilla, extrusora, ejes, bujes, poleas, placas, soportes |
 | **Comparar** | Dos variantes lado a lado |
 | **Ajustes** | Acceso de administrador, familias, tipos, reglas de revisión, conexión |
 
-## Piezas de máquinas
+## Subir plano: ladrillo o pieza
+
+Se elige **Detectar solo**, **Ladrillo** o **Pieza** (con su grupo). En automático la app suma indicios:
+
+| Indicio | Apunta a |
+|---|---|
+| Modelo 3D (STEP, IGES, STL, OBJ) | Pieza |
+| Nombre del archivo con boquilla, araña, dado, núcleo, marco, eje, buje, polea, brida, soporte… | Pieza, y propone el grupo |
+| Nombre con matriz, molde, ladrillo, portante, H12, P12… | Ladrillo |
+| Marco cerrado con 8 o más huecos, casi todos rectangulares y repetidos | Ladrillo |
+| Rayado en las caras | Ladrillo |
+| Vacío entre 35 % y 75 % | Ladrillo |
+| Huecos redondos (agujeros de mecanizado) o sin marco con dados | Pieza |
+
+Arriba del resultado se ve qué decidió, con qué seguridad y por qué. El botón **«No, es una pieza» / «No, es un ladrillo»** abre el mismo archivo en la otra sección sin volver a subirlo.
+
+## Piezas de moldes y máquinas
 
 Pantallas: **Grupos** → **piezas del grupo** (filtro por máquina) → **ficha** con 3D, medidas, peso, datos y archivos.
+
+- Grupos por defecto: 🧩 Molde / matriz (dados, marco, núcleos, portanúcleos, puentes), 🕸️ Araña, 🔻 Boquilla, 🌀 Extrusora, 🔩 Ejes, ⭕ Bujes, ⚙️ Poleas, 🔲 Placas, 🏗️ Soportes.
+- Cada pieza se puede enlazar a un **molde** del catálogo (*Molde al que pertenece*). La ficha del molde tiene la pestaña **🧩 Piezas** con todas sus piezas y el botón **＋ Agregar pieza**.
 
 | Entrada | Qué hace la app |
 |---|---|
@@ -37,7 +57,7 @@ Pantallas: **Grupos** → **piezas del grupo** (filtro por máquina) → **ficha
 - Descargas: **STL** (para impresión 3D) e imagen.
 - **Corte**: muestra el interior.
 - Se guarda la receta de la pieza: las vistas y los parámetros, o la malla si es un modelo 3D.
-- En Drive se suben el archivo original, la animación y una imagen, en `Piezas de máquinas/<grupo>/`.
+- En Drive se suben el archivo original, la animación y una imagen, en `Piezas de máquinas/<grupo>/` (en la planilla, hoja `Piezas`, columna `Molde` para el enlace).
 - Los grupos se crean y editan en *Ajustes → Grupos de piezas* o con **＋ Nuevo grupo**. Solo el administrador puede hacerlo. Cada grupo tiene un método por defecto.
 
 Límites de los planos 2D:
@@ -106,7 +126,7 @@ En los PDF de AutoCAD las cotas vienen dibujadas como líneas y no como texto, a
 4. *Implementar → Administrar implementaciones → ✏️ → Versión: Nueva versión → Implementar*. Así se mantiene la URL `/exec` de `config.js`.
 
 ### GitHub Pages
-Subí `index.html`, `styles.css`, `config.js`, `geo.js`, `revision.js`, `plano.js`, `datos.js`, `visor.js`, `app.js`, `piezas.js`, `pieza3d.js`, `seed.json`, `img/` y este README.
+Subí `index.html`, `styles.css`, `config.js`, `geo.js`, `revision.js`, `plano.js`, `datos.js`, `visor.js`, `app.js`, `piezas.js`, `pieza3d.js`, `subir.js`, `seed.json`, `img/` y este README.
 
 ### Navegador
 La animación se graba en el navegador. Usá Chrome o Edge en una PC, por https (GitHub Pages ya lo es). Si el navegador no puede grabar video, se guarda solo la imagen.

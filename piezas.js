@@ -20,6 +20,8 @@ const gruposPz = () => (ST.config && ST.config.gruposPiezas && ST.config.gruposP
 const grupoDe = id => gruposPz().find(g => g.id === id);
 const piezasDe = gid => ST.piezas.filter(p => gid === '__otros' ? !grupoDe(p.grupo) : p.grupo === gid);
 const piezaDe = id => ST.piezas.find(p => p.id === id);
+const moldeDePieza = p => p && p.moldeId ? ST.moldes.find(m => m.id === p.moldeId) : null;
+const piezasDeMolde = mid => ST.piezas.filter(p => p.moldeId === mid);
 const etiquetaPieza = p => (p.codigo ? p.codigo + ' · ' : '') + (p.nombre || p.id);
 const densidadDe = p => { const v = num(p.densidad); if (v !== null) return v; const m = MATERIALES.find(x => x.id === p.material); return m && m.d ? m.d : 7.85; };
 const pesoKg = (vol, d) => vol / 1000 * d / 1000;
@@ -42,12 +44,12 @@ function cardPieza(p) {
   return `<a class="vcard pz" href="#/pieza/${encodeURIComponent(p.id)}">${miniPieza(p)}
     <div class="vc-cuerpo"><div class="mc-top"><div><b>${esc(p.codigo || p.id)}</b><small>${esc(p.nombre || '')}</small></div><span class="tag ${e.cls}">${e.e} ${esc(e.id)}</span></div>
     <div class="mc-k"><div><span>Medidas</span><b>${fmt(md.largo, 0)}×${fmt(md.ancho, 0)}×${fmt(md.alto, 0)}</b></div><div><span>Peso</span><b>${fmt(md.peso, 2)} kg</b></div><div><span>Material</span><b class="corto">${esc(p.material || '—')}</b></div></div>
-    <div class="vc-pie">${p.maquina ? `<span class="tag">🏭 ${esc(p.maquina)}</span>` : ''}${num(p.cantidad) ? `<span class="tag">× ${fmt(num(p.cantidad))}</span>` : ''}${p.animacionUrl ? '<span class="tag">🎬</span>' : ''}<span class="tag t-mut">${esc((METODOS[p.metodo] || {}).n || '')}</span></div></div></a>`;
+    <div class="vc-pie">${moldeDePieza(p) ? `<span class="tag">🧱 ${esc(etiquetaMolde(moldeDePieza(p)))}</span>` : ''}${p.maquina ? `<span class="tag">🏭 ${esc(p.maquina)}</span>` : ''}${num(p.cantidad) ? `<span class="tag">× ${fmt(num(p.cantidad))}</span>` : ''}${p.animacionUrl ? '<span class="tag">🎬</span>' : ''}<span class="tag t-mut">${esc((METODOS[p.metodo] || {}).n || '')}</span></div></div></a>`;
 }
 
 function filtroPz(p) {
   const q = norm(PZ.q);
-  if (q && !norm([p.codigo, p.nombre, p.maquina, p.material, p.notas, p.id].join(' ')).includes(q)) return false;
+  if (q && !norm([p.codigo, p.nombre, p.maquina, moldeDePieza(p) ? etiquetaMolde(moldeDePieza(p)) : '', p.material, p.notas, p.id].join(' ')).includes(q)) return false;
   if (PZ.maq && p.maquina !== PZ.maq) return false;
   return true;
 }
@@ -58,9 +60,9 @@ function vistaPiezas() {
   if (otros.length) gs.push({ g: { id: '__otros', nombre: 'Otros', icono: '📦', descripcion: 'Piezas sin grupo' }, ps: otros });
   const res = PZ.q ? ST.piezas.filter(filtroPz) : [];
   app().innerHTML = `<section class="vista">${bannerLocal()}
-    <div class="hero"><div><div class="eyebrow">${esc(CONF.PLANTA || 'Planta')}</div><h1>Piezas de <span>máquinas</span></h1>
+    <div class="hero"><div><div class="eyebrow">${esc(CONF.PLANTA || 'Planta')}</div><h1>Piezas de <span>moldes y máquinas</span></h1>
       <p class="sub">Del plano de la pieza (PDF, DXF, STEP o STL) a la pieza en 3D, agrupada por tipo.</p></div>
-      <div class="acciones">${esAdmin() ? '<button class="btn" id="bGrupoN">＋ Nuevo grupo</button>' : ''}${puedeCargar() ? '<a class="btn pri" href="#/nuevapieza">⚙️ Nueva pieza</a>' : ''}</div></div>
+      <div class="acciones">${esAdmin() ? '<button class="btn" id="bGrupoN">＋ Nuevo grupo</button>' : ''}${puedeCargar() ? '<a class="btn pri" href="#/subir?modo=pieza">📤 Subir pieza</a>' : ''}</div></div>
     <div id="grupoN"></div>
     <div class="buscador"><input id="pzQ" type="search" placeholder="🔎 Buscar por código, nombre, máquina o material" value="${esc(PZ.q)}"></div>
     ${PZ.q ? (res.length ? `<div class="grid-var">${res.map(cardPieza).join('')}</div>` : '<div class="card"><div class="empty">No hay piezas que coincidan.</div></div>') : `<div class="grid-fam">${gs.map(({ g, ps }) => {
@@ -171,7 +173,7 @@ async function vistaPieza(id) {
       ${cardHtml('⚙️ Pieza en 3D', 'Arrastrá para girarla · rueda para acercar · «Corte» muestra el interior', toolbarPieza() + '<div class="visor" id="visorPz"></div>')}
       <div class="col">
         ${cardHtml('📐 Medidas', `${esc((METODOS[p.metodo] || {}).n || '')}`, `<div id="pzKpi">${procesando('Armando la pieza…')}</div>`)}
-        ${cardHtml('📋 Datos', '', `<table class="tabla-datos"><tbody>${fila('Grupo', esc(g.icono + ' ' + g.nombre))}${fila('Máquina / equipo', esc(p.maquina))}${fila('Material', esc(p.material))}${fila('Cantidad por equipo', num(p.cantidad) ? fmt(num(p.cantidad)) : '')}${fila('Versión', esc(p.version))}${fila('Archivo', esc(p.archivo))}${fila('Actualizado', fFecha(p.actualizado))}${fila('Notas', esc(p.notas))}</tbody></table>`, ' style="margin-top:16px"')}
+        ${cardHtml('📋 Datos', '', `<table class="tabla-datos"><tbody>${fila('Grupo', esc(g.icono + ' ' + g.nombre))}${fila('Molde', moldeDePieza(p) ? `<a href="#/molde/${encodeURIComponent(p.moldeId)}">${esc(etiquetaMolde(moldeDePieza(p)))}</a>` : '—')}${fila('Máquina / equipo', esc(p.maquina))}${fila('Material', esc(p.material))}${fila('Cantidad por equipo', num(p.cantidad) ? fmt(num(p.cantidad)) : '')}${fila('Versión', esc(p.version))}${fila('Archivo', esc(p.archivo))}${fila('Actualizado', fFecha(p.actualizado))}${fila('Notas', esc(p.notas))}</tbody></table>`, ' style="margin-top:16px"')}
       </div>
     </div>
     ${cardHtml('☁️ Archivos', modoLocal() ? 'En modo local no se suben archivos' : (p.animacionUrl ? '' : 'Todavía sin animación'), `<div class="acciones" style="margin-top:0">${archivos}<button class="btn" id="pzStl">⬇️ STL (impresión 3D)</button><button class="btn" id="pzPng">🖼️ Imagen PNG</button>${modoLocal() ? '' : `<button class="btn ${p.animacionUrl ? '' : 'pri'}" id="pzAnim">🎬 ${p.animacionUrl ? 'Volver a grabar animación' : 'Grabar animación y subir a Drive'}</button>`}</div>`, ' style="margin-top:16px"')}
@@ -230,6 +232,7 @@ function camposPieza(p, pre, gidDef) {
     <label class="f">Código<input id="${pre}codigo" maxlength="30" value="${esc(v('codigo'))}" placeholder="EX-EJE-01"></label>
     <label class="f w2">Nombre<input id="${pre}nombre" maxlength="80" value="${esc(v('nombre'))}" placeholder="Eje de la hélice de la extrusora"></label>
     <label class="f">Máquina / equipo<input id="${pre}maquina" maxlength="50" list="${pre}maqs" value="${esc(v('maquina'))}" placeholder="Extrusora"><datalist id="${pre}maqs">${[...new Set(ST.piezas.map(x => x.maquina).filter(Boolean))].map(m => `<option value="${esc(m)}">`).join('')}</datalist></label>
+    <label class="f">Molde al que pertenece<select id="${pre}moldeId"><option value="">— ninguno —</option>${ST.moldes.slice().sort((a, b) => etiquetaMolde(a).localeCompare(etiquetaMolde(b), 'es', { numeric: true })).map(m => `<option value="${esc(m.id)}" ${p.moldeId === m.id ? 'selected' : ''}>${esc(etiquetaMolde(m))}</option>`).join('')}</select></label>
     <label class="f">Material<select id="${pre}material">${MATERIALES.map(m => `<option value="${esc(m.id)}" ${mat === m.id ? 'selected' : ''}>${esc(m.id)}${m.d ? ' · ' + fmt(m.d, 2) : ''}</option>`).join('')}</select></label>
     <label class="f">Densidad (g/cm³)<input id="${pre}densidad" type="number" step="0.01" value="${esc(v('densidad') || (MATERIALES.find(m => m.id === mat) || {}).d || '')}"></label>
     <label class="f">Cantidad por equipo<input id="${pre}cantidad" type="number" step="1" min="0" value="${esc(v('cantidad'))}"></label>
@@ -242,7 +245,7 @@ function camposPieza(p, pre, gidDef) {
 function leerPieza(pre) {
   const g = k => { const el = $(pre + k); return el ? el.value.trim() : ''; };
   const o = {};
-  ['grupo', 'codigo', 'nombre', 'maquina', 'material', 'densidad', 'cantidad', 'estado', 'version', 'notas'].forEach(k => { o[k] = g(k); });
+  ['grupo', 'codigo', 'nombre', 'maquina', 'moldeId', 'material', 'densidad', 'cantidad', 'estado', 'version', 'notas'].forEach(k => { o[k] = g(k); });
   return o;
 }
 
@@ -292,16 +295,17 @@ function grupoInicial() {
   return grupoDe(g) ? g : (gruposPz()[0] || {}).id;
 }
 
-async function iniciarPieza(f) {
+async function iniciarPieza(f, pre, gidPre) {
   const ext = f.name.toLowerCase().split('.').pop();
-  const gid = grupoInicial();
+  const gid = gidPre && grupoDe(gidPre) ? gidPre : grupoInicial();
   const g = grupoDe(gid) || {};
   const nombre = f.name.replace(/\.[^.]+$/, '');
-  PZ.carga = { archivo: { nombre: f.name, mime: f.type || 'application/octet-stream', ext }, estado: 'leyendo', meta: { grupo: gid, nombre, codigo: '' }, cambios: {}, perfiles: {}, version: 0 };
+  if (!ST.clasif || ST.clasif.nombre !== f.name || ST.clasif.file !== f) ST.clasif = { nombre: f.name, file: f, clase: 'pieza', auto: null, motivos: [], grupo: gid };
+  PZ.carga = { archivo: { nombre: f.name, mime: f.type || 'application/octet-stream', ext }, estado: 'leyendo', meta: { grupo: gid, nombre, codigo: '', moldeId: typeof SUBIR !== 'undefined' && SUBIR.molde && ST.moldes.some(m => m.id === SUBIR.molde) ? SUBIR.molde : '' }, cambios: {}, perfiles: {}, version: 0 };
   vistaNuevaPieza();
   const C = PZ.carga;
   try {
-    const buf = await f.arrayBuffer();
+    const buf = pre ? pre.buf : await f.arrayBuffer();
     C.buf = buf.slice(0);
     if (EXT_3D.includes(ext)) {
       await listo3D();
@@ -309,7 +313,7 @@ async function iniciarPieza(f) {
       C.def = { v: 1, metodo: 'malla', malla: r.malla };
       C.metodo = 'malla';
     } else if (ext === 'pdf' || ext === 'dxf') {
-      C.lect = ext === 'pdf' ? await Geo.leerPdf(buf) : Geo.leerDxf(new TextDecoder('utf-8').decode(buf));
+      C.lect = pre ? pre.lect : ext === 'pdf' ? await Geo.leerPdf(buf) : Geo.leerDxf(new TextDecoder('utf-8').decode(buf));
       C.capas = Geo.capasPieza(C.lect);
       C.marco = 'auto';
       C.metodo = g.metodo && g.metodo !== 'malla' ? g.metodo : 'extrusion';
@@ -449,8 +453,9 @@ function vistaNuevaPieza() {
   }
   if (C.estado === 'leyendo') { app().innerHTML = `<section class="vista">${cab('Leyendo <span>' + esc(C.archivo.nombre) + '</span>')}</div></div><div class="card">${procesando(EXT_3D.includes(C.archivo.ext) ? 'Leyendo el modelo 3D…' : 'Buscando las vistas de la pieza…')}</div></section>`; return; }
   if (C.estado === 'error') {
-    app().innerHTML = `<section class="vista">${cab('No se pudo leer <span>' + esc(C.archivo.nombre) + '</span>')}</div></div><div class="alerta bad"><span class="e">⚠️</span><span>${esc(C.error)}</span></div><div class="card" style="margin-top:16px">${dropPieza('dropPz', true)}</div></section>`;
+    app().innerHTML = `<section class="vista">${cab('No se pudo leer <span>' + esc(C.archivo.nombre) + '</span>')}</div></div>${bannerClase('pieza')}<div class="alerta bad"><span class="e">⚠️</span><span>${esc(C.error)}</span></div><div class="card" style="margin-top:16px">${dropPieza('dropPz', true)}</div></section>`;
     enlazarDropPieza('dropPz');
+    enlazarBannerClase('pieza');
     return;
   }
   const es2D = C.metodo !== 'malla';
@@ -469,6 +474,7 @@ function vistaNuevaPieza() {
     </div>` : `<div class="det"><div class="full2"><span>Modelo 3D</span><b>${esc(C.archivo.nombre)}</b></div></div><div class="form" style="margin-top:10px"><label class="f">Qué eje va hacia arriba<select id="pzArriba">${[['z', 'Z (AutoCAD, Inventor, SolidWorks en Z)'], ['y', 'Y (SolidWorks por defecto, Fusion)'], ['x', 'X']].map(([k, n]) => `<option value="${k}" ${(C.arriba || 'z') === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div><p class="sub" style="margin-top:8px">Se toma en milímetros, tal como viene del CAD.</p>`;
   app().innerHTML = `<section class="vista">${bannerLocal()}${cab('Así queda la <span>pieza en 3D</span>')}<p class="sub">${esc(C.archivo.nombre)}${es2D ? ` · ${C.V.vistas.length} vista(s) encontradas${C.V.marco ? ' · se ignoró el marco de la lámina' : ''}` : ''}</p></div>
       <div class="acciones"><button class="btn" id="pzOtro">📄 Otro archivo</button></div></div>
+    ${bannerClase('pieza')}
     <div class="grid g-21">
       ${cardHtml('⚙️ Pieza en 3D', 'Arrastrá para girarla · «Corte» muestra el interior', toolbarPieza() + '<div class="visor" id="visorPz"></div>')}
       <div class="col">
@@ -487,9 +493,10 @@ function vistaNuevaPieza() {
       <div class="acciones"><button class="btn pri brillo" id="pzGuardar">💾 Guardar pieza y animación</button></div></div>
   </section>`;
   enlazarToolbarPieza();
-  $('pzOtro').onclick = () => { PZ.carga = null; vistaNuevaPieza(); };
+  $('pzOtro').onclick = () => { PZ.carga = null; location.hash = '#/subir'; };
+  enlazarBannerClase('pieza');
   enlazarMaterial('pn', () => pintarKpiCarga());
-  ['grupo', 'codigo', 'nombre', 'maquina', 'material', 'densidad', 'cantidad', 'estado', 'version', 'notas'].forEach(k => { const el = $('pn' + k); if (el) el.addEventListener('change', () => { C.meta = leerPieza('pn'); }); });
+  ['grupo', 'codigo', 'nombre', 'maquina', 'moldeId', 'material', 'densidad', 'cantidad', 'estado', 'version', 'notas'].forEach(k => { const el = $('pn' + k); if (el) el.addEventListener('change', () => { C.meta = leerPieza('pn'); }); });
   $('pzGuardar').onclick = guardarPiezaNueva;
   if (es2D) enlazarControles();
   else if ($('pzArriba')) $('pzArriba').onchange = e => { C.meta = leerPieza('pn'); C.arriba = e.target.value; rearmar(); };

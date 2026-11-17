@@ -17,12 +17,15 @@ const CONFIG_DEFECTO = {
   ],
   umbrales: { paredMin: 6.0, tabiqueMin: 5.5, huecoMin: 10, radioMin: 1.5, tolSimetria: 0.3, tolUniforme: 0.25, tolBalance: 0.3, tolMedida: 2.0, tolEscala: 0.5 },
   gruposPiezas: [
+    { id: 'molde', nombre: 'Molde / matriz', icono: '🧩', descripcion: 'Dados, marco, núcleos, portanúcleos y puentes del molde', metodo: 'extrusion' },
+    { id: 'arana', nombre: 'Araña', icono: '🕸️', descripcion: 'Arañas y portadados que sostienen los núcleos', metodo: 'extrusion' },
+    { id: 'boquilla', nombre: 'Boquilla', icono: '🔻', descripcion: 'Boquillas y piezas de transición entre la extrusora y el molde', metodo: 'vistas' },
+    { id: 'extrusora', nombre: 'Extrusora', icono: '🌀', descripcion: 'Hélices, camisas, rejillas y piezas de la extrusora', metodo: 'vistas' },
     { id: 'ejes', nombre: 'Ejes y árboles', icono: '🔩', descripcion: 'Ejes, árboles y pernos torneados', metodo: 'revolucion' },
     { id: 'bujes', nombre: 'Bujes y casquillos', icono: '⭕', descripcion: 'Bujes, casquillos, camisas y anillos', metodo: 'revolucion' },
     { id: 'poleas', nombre: 'Poleas y engranajes', icono: '⚙️', descripcion: 'Poleas, piñones, coronas y ruedas', metodo: 'revolucion' },
     { id: 'placas', nombre: 'Placas y bridas', icono: '🔲', descripcion: 'Chapas, bridas, tapas y placas cortadas', metodo: 'extrusion' },
-    { id: 'soportes', nombre: 'Soportes y bastidores', icono: '🏗️', descripcion: 'Soportes, ménsulas y piezas soldadas', metodo: 'vistas' },
-    { id: 'extrusora', nombre: 'Extrusora', icono: '🌀', descripcion: 'Hélices, camisas, rejillas y piezas de la extrusora', metodo: 'vistas' }
+    { id: 'soportes', nombre: 'Soportes y bastidores', icono: '🏗️', descripcion: 'Soportes, ménsulas y piezas soldadas', metodo: 'vistas' }
   ],
   soloAdminCarga: false
 };

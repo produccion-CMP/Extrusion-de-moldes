@@ -3,7 +3,7 @@
 const VISTAS = [
   { id: 'catalogo', e: '🧱', n: 'Catálogo' },
   { id: 'piezas', e: '⚙️', n: 'Piezas' },
-  { id: 'nuevo', e: '📄', n: 'Nuevo plano' },
+  { id: 'subir', e: '📤', n: 'Subir plano' },
   { id: 'comparar', e: '⚖️', n: 'Comparar' },
   { id: 'ajustes', e: '🛠️', n: 'Ajustes' }
 ];
@@ -517,10 +517,11 @@ function tiposCarga() {
   return ST.tipos;
 }
 
-function iniciarCarga(f) {
+function iniciarCarga(f, pre) {
   const ext = (f.name.split('.').pop() || '').toLowerCase();
   if (!['pdf', 'dxf'].includes(ext)) { toast('Formato no soportado: usá PDF o DXF', 'bad'); return; }
-  ST.carga = { file: f, archivo: { nombre: f.name, size: f.size, mime: f.type || (ext === 'pdf' ? 'application/pdf' : 'application/dxf'), ext }, giro: 0, espejo: false, meta: {}, estado: 'leyendo' };
+  if (!ST.clasif || ST.clasif.nombre !== f.name || ST.clasif.file !== f) ST.clasif = { nombre: f.name, file: f, clase: 'ladrillo', auto: null, motivos: [], grupo: '' };
+  ST.carga = { file: f, pre: pre || null, archivo: { nombre: f.name, size: f.size, mime: f.type || (ext === 'pdf' ? 'application/pdf' : 'application/dxf'), ext }, giro: 0, espejo: false, meta: {}, estado: 'leyendo' };
   if (location.hash.startsWith('#/nuevo')) pintarNuevo(); else location.hash = '#/nuevo';
   procesarCarga();
 }
@@ -528,9 +529,10 @@ function iniciarCarga(f) {
 async function procesarCarga() {
   const C = ST.carga;
   try {
-    const buf = await C.file.arrayBuffer();
+    const buf = C.pre ? C.pre.buf : await C.file.arrayBuffer();
     C.buf = buf;
-    if (C.archivo.ext === 'pdf') C.lect = await Geo.leerPdf(buf.slice(0));
+    if (C.pre) C.lect = C.pre.lect;
+    else if (C.archivo.ext === 'pdf') C.lect = await Geo.leerPdf(buf.slice(0));
     else {
       const txt = new TextDecoder('utf-8').decode(buf);
       if (/^AutoCAD Binary DXF/.test(txt.slice(0, 22))) throw new Error('El DXF es binario: guardalo como DXF ASCII desde AutoCAD');
@@ -540,7 +542,9 @@ async function procesarCarga() {
     C.estado = 'detectando';
     if (ST.carga === C && ST.vista === 'nuevo') pintarNuevo();
     await new Promise(r => setTimeout(r, 40));
-    C.base = await Geo.extraer(C.lect, { capas: C.capasSel || null });
+    if (C.pre && !C.pre.base) { C.pre = null; throw new Error('No se encontró un marco cerrado con dados adentro: puede que el plano sea de una pieza y no de un ladrillo'); }
+    C.base = C.pre && !C.capasSel ? C.pre.base : await Geo.extraer(C.lect, { capas: C.capasSel || null });
+    C.pre = null;
     C.capasSel = C.base.capas;
     if (!C.tipoId) {
       const ult = ST.moldes.slice().sort((a, b) => String(b.actualizado || '').localeCompare(String(a.actualizado || '')))[0];
@@ -692,8 +696,8 @@ function opcionesTipos(sel, conNuevo) {
 }
 
 function pintarNav() {
-  const v = ['molde', 'familia', 'tipo'].includes(ST.vista) ? 'catalogo' : ['grupo', 'pieza', 'nuevapieza'].includes(ST.vista) ? 'piezas' : ST.vista;
-  const vis = VISTAS.filter(x => x.id !== 'nuevo' || puedeCargar());
+  const v = ['molde', 'familia', 'tipo'].includes(ST.vista) ? 'catalogo' : ['grupo', 'pieza'].includes(ST.vista) ? 'piezas' : ['nuevo', 'nuevapieza'].includes(ST.vista) ? 'subir' : ST.vista;
+  const vis = VISTAS.filter(x => x.id !== 'subir' || puedeCargar());
   $('nav').innerHTML = vis.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}" title="${x.n}"><span class="e">${x.e}</span><span class="tx">${x.n}</span></a>`).join('');
   $('bnav').innerHTML = vis.map(x => `<a href="#/${x.id}" class="${x.id === v ? 'on' : ''}"><span class="e">${x.e}</span>${x.n}</a>`).join('');
   const chip = $('chipAdmin');
@@ -747,7 +751,7 @@ function vistaCatalogo() {
   app().innerHTML = `<section class="vista">${bannerLocal()}
     <div class="hero"><div><div class="eyebrow">${esc(CONF.PLANTA || 'Planta')}</div><h1>Catálogo de <span>ladrillos</span></h1>
       <p class="sub">Elegí la familia, el tipo y la variante para ver el ladrillo cocido, el plano y la revisión técnica de cada molde.</p></div>
-      ${puedeCargar() ? '<div class="acciones"><a class="btn pri" href="#/nuevo">📄 Nuevo plano</a></div>' : ''}</div>
+      ${puedeCargar() ? '<div class="acciones"><a class="btn pri" href="#/subir">📤 Subir plano</a></div>' : ''}</div>
     <div class="grid-fam">${tarjetas.map(({ f, ts }) => {
       const ms = ts.flatMap(t => moldesDeTipo(t.id));
       const ult = ms.slice().sort((a, b) => String(b.actualizado || '').localeCompare(String(a.actualizado || '')))[0];
@@ -833,7 +837,8 @@ async function vistaMolde(id) {
   const tl = ch.arriba.concat([m], ch.abajo.map(x => x.m));
   const pest = ST.pestana || '3d';
   const archivos = [m.archivoUrl ? `<a class="btn" href="${esc(m.archivoUrl)}" target="_blank" rel="noopener">📄 Plano original</a>` : '', m.animacionUrl ? `<a class="btn" href="${esc(m.animacionUrl)}" target="_blank" rel="noopener">🎬 Animación</a>` : '', m.imagenUrl ? `<a class="btn" href="${esc(m.imagenUrl)}" target="_blank" rel="noopener">🖼️ Imagen</a>` : ''].join('');
-  const tabs = [['3d', '🧱 Ladrillo 3D'], ['plano', '📐 Plano y vistas'], ['revision', '🩺 Revisión'], ['medidas', '📋 Medidas'], ['versiones', '🔗 Versiones y archivos']];
+  const tabs = [['3d', '🧱 Ladrillo 3D'], ['plano', '📐 Plano y vistas'], ['revision', '🩺 Revisión'], ['medidas', '📋 Medidas'], ['versiones', '🔗 Versiones y archivos'], ['piezas', `🧩 Piezas (${piezasDeMolde(m.id).length})`]];
+  const pzs = piezasDeMolde(m.id).sort((a, b) => String(a.grupo + a.codigo + a.nombre).localeCompare(String(b.grupo + b.codigo + b.nombre), 'es', { numeric: true }));
   app().innerHTML = `<section class="vista">${bannerLocal()}
     <div class="hero"><div>${migas([['Catálogo', '#/catalogo'], [f.nombre, '#/familia/' + encodeURIComponent(f.id)], [t.codigo || t.nombre || 'Tipo', '#/tipo/' + encodeURIComponent(t.id || '')], [etiquetaMolde(m)]])}
       <h1>${esc(m.codigo || m.id)} <span>${esc(m.version || '')}</span></h1>
@@ -849,6 +854,8 @@ async function vistaMolde(id) {
       ${cardHtml('🔗 Versiones de este molde', '', `<div class="timeline">${tl.map(x => `<a href="#/molde/${encodeURIComponent(x.id)}" class="${x.id === m.id ? 'yo' : ''}"><span class="nodo"></span><span class="info"><b>${esc(etiquetaMolde(x))}</b><small>${estadoDe(x.estado).e} ${esc(x.estado || '')} · ${fmt(num(x.huecos))} huecos · ${fmt(num(x.vacio), 1)} %</small></span></a>`).join('')}</div>`)}
       ${cardHtml('☁️ Archivos en Drive', modoLocal() ? 'En modo local no se suben archivos' : (m.animacionUrl ? '' : 'Todavía sin animación'), `<div class="acciones" style="margin-top:0">${archivos}${modoLocal() ? '' : `<button class="btn ${m.animacionUrl ? '' : 'pri'}" id="btnAnim">🎬 ${m.animacionUrl ? 'Volver a grabar animación' : 'Grabar animación y subir a Drive'}</button>`}</div>${m.notas ? `<p style="white-space:pre-wrap;margin-top:12px">📝 ${esc(m.notas)}</p>` : ''}`)}
     </div></div>
+    <div class="pane" data-p="piezas" ${pest === 'piezas' ? '' : 'hidden'}><div class="card"><div class="card-h"><div class="t"><h3>🧩 Piezas de este molde</h3><span class="sub">Dados, marco, núcleos, araña y boquilla enlazados a ${esc(etiquetaMolde(m))}</span></div>${puedeCargar() ? `<div class="acciones" style="margin:0"><a class="btn pri" href="#/subir?modo=pieza&grupo=molde&molde=${encodeURIComponent(m.id)}">＋ Agregar pieza</a></div>` : ''}</div>
+      ${pzs.length ? `<div class="grid-var">${pzs.map(cardPieza).join('')}</div>` : '<div class="empty"><b>Todavía no hay piezas enlazadas</b><span>Subí el plano de un dado, del marco, de la araña o de la boquilla y elegí este molde en «Molde al que pertenece».</span></div>'}</div></div>
   </section>`;
   const tc = $('tabs');
   tc.querySelectorAll('button').forEach(b => { b.onclick = () => { ST.pestana = b.dataset.t; tc.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); moverPill(tc); app().querySelectorAll('.pane').forEach(p => { p.hidden = p.dataset.p !== b.dataset.t; }); }; });
@@ -927,8 +934,9 @@ function pintarNuevo() {
     return;
   }
   if (C.estado === 'error') {
-    app().innerHTML = `<section class="vista">${cab}</div></div><div class="alerta bad"><span class="e">⚠️</span><span>${esc(C.error)}</span></div><div class="card" style="margin-top:16px">${dropHtml('dropNuevo', true)}</div></section>`;
+    app().innerHTML = `<section class="vista">${cab}</div></div>${bannerClase('ladrillo')}<div class="alerta bad"><span class="e">⚠️</span><span>${esc(C.error)}</span></div><div class="card" style="margin-top:16px">${dropHtml('dropNuevo', true)}</div></section>`;
     enlazarDrop('dropNuevo');
+    enlazarBannerClase('ladrillo');
     return;
   }
   if (!ST.tipos.length && !esAdmin()) {
@@ -939,6 +947,7 @@ function pintarNuevo() {
   const rev = revisionCarga();
   app().innerHTML = `<section class="vista">${bannerLocal()}${cab}<p class="sub">${esc(tipoLabel(t) || 'Tipo nuevo')} · ${C.met.nHuecos} huecos detectados en el plano</p></div>
       <div class="acciones"><button class="btn" id="bOtro">📄 Otro plano</button></div></div>
+    ${bannerClase('ladrillo')}
     <div id="nAviso">${avisoEscala()}</div>
     <div class="grid g-21" style="margin-top:12px">
       ${cardHtml('🧱 Ladrillo cocido en 3D', 'Arrastrá para girarlo · rueda para acercar', toolbarVisor() + '<div class="visor" id="visor"></div>')}
@@ -971,7 +980,8 @@ function pintarNuevo() {
     }, 350);
   });
   armado = true;
-  $('bOtro').onclick = () => { ST.carga = null; pintarNuevo(); };
+  $('bOtro').onclick = () => { ST.carga = null; location.hash = '#/subir'; };
+  enlazarBannerClase('ladrillo');
   $('bGuardar').onclick = guardarNuevo;
   montarVisor($('visor'), C.coc.geo, C.coc.m, C.geoV, C.met, tituloCarga());
 }
@@ -1146,7 +1156,7 @@ function leerRuta() {
   let v = partes[0] || 'catalogo';
   if (v === 'cargar') v = 'nuevo';
   if (v === 'tipos') v = 'ajustes';
-  return { v: ['catalogo', 'familia', 'tipo', 'molde', 'nuevo', 'comparar', 'ajustes', 'piezas', 'grupo', 'pieza', 'nuevapieza'].includes(v) ? v : 'catalogo', args: partes.slice(1) };
+  return { v: ['catalogo', 'familia', 'tipo', 'molde', 'nuevo', 'comparar', 'ajustes', 'piezas', 'grupo', 'pieza', 'nuevapieza', 'subir'].includes(v) ? v : 'catalogo', args: partes.slice(1) };
 }
 
 function render() {
@@ -1157,7 +1167,7 @@ function render() {
   if (ST.visor) { ST.visor.destruir(); ST.visor = null; }
   if (PZ.visor) { PZ.visor.destruir(); PZ.visor = null; }
   if (ST.vista !== 'nuevapieza') PZ.carga = null;
-  if (!ST.cargado && !['ajustes', 'nuevo', 'nuevapieza'].includes(ST.vista)) { app().innerHTML = `<section class="vista"><div class="card">${procesando('Cargando catálogo…')}</div></section>`; return; }
+  if (!ST.cargado && !['ajustes', 'nuevo', 'nuevapieza', 'subir'].includes(ST.vista)) { app().innerHTML = `<section class="vista"><div class="card">${procesando('Cargando catálogo…')}</div></section>`; return; }
   if (ST.vista === 'catalogo') vistaCatalogo();
   else if (ST.vista === 'familia') vistaFamilia(ST.args[0]);
   else if (ST.vista === 'tipo') vistaTipo(ST.args[0]);
@@ -1168,6 +1178,7 @@ function render() {
   else if (ST.vista === 'grupo') vistaGrupo(ST.args[0]);
   else if (ST.vista === 'pieza') vistaPieza(ST.args[0]);
   else if (ST.vista === 'nuevapieza') vistaNuevaPieza();
+  else if (ST.vista === 'subir') vistaSubir();
   else vistaAjustes();
 }
 
